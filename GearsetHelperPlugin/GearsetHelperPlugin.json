@@ -7,8 +7,10 @@
 	"InternalName": "GearsetHelperPlugin",
 	"ApplicableVersion": "any",
 	"Tags": [
-		"sample",
-		"plugin",
-		"goats"
+		"UI",
+		"gearset",
+		"examine",
+		"etro",
+		"ariyala"
 	]
 }
