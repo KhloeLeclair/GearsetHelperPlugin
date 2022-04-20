@@ -1,3 +1,5 @@
+![](images/icon.png)
+
 # Gearset Helper Plugin
 
 Displays extra information next to the Examine window, including:
@@ -11,4 +13,4 @@ enter your API key.
 
 ## Screenshot
 
-![](Data/Image.png)
+![](images/image1.png)
