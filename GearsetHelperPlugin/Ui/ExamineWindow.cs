@@ -3,8 +3,6 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Dalamud.Logging;
-
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Enums;
 
