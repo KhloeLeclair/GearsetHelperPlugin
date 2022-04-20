@@ -1,80 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
 
-using GearsetExportPlugin.Sheets;
+using GearsetHelperPlugin.Sheets;
 
-namespace GearsetExportPlugin;
-
-
-internal enum Stat {
-	STR = 1,
-	DEX = 2,
-	VIT = 3,
-	INT = 4,
-	MND = 5,
-	PIE = 6,
-
-	HP = 7,
-	MP = 8,
-	TP = 9,
-	GP = 10,
-	CP = 11,
-
-	PhysDMG = 12,
-	MagDMG = 13,
-
-	TEN = 19,
-	DEF = 21,
-
-	DH = 22,
-	CRT = 27,
-	DET = 44,
-	SKS = 45,
-	SPS = 46,
-
-	Craftsmanship = 70,
-	Control = 71,
-	Gathering = 72,
-	Perception = 73
-}
-
-
-internal static class BaseStats {
-	internal static Dictionary<uint, int> Lvl90_Stats = new() {
-		[(int) Stat.STR] = 390,
-		[(int) Stat.DEX] = 390,
-		[(int) Stat.VIT] = 390,
-		[(int) Stat.INT] = 390,
-		[(int) Stat.MND] = 390,
-		[(int) Stat.PIE] = 390,
-
-		[(int) Stat.HP] = 3000,
-		[(int) Stat.MP] = 10000,
-
-		[(int) Stat.TEN] = 400,
-		[(int) Stat.DH] = 400,
-		[(int) Stat.CRT] = 400,
-		[(int) Stat.DET] = 390,
-		[(int) Stat.SKS] = 400,
-		[(int) Stat.SPS] = 400,
-
-		[(int) Stat.Craftsmanship] = 0,
-		[(int) Stat.Control] = 0,
-		[(int) Stat.CP] = 180,
-
-		[(int) Stat.Gathering] = 0,
-		[(int) Stat.Perception] = 0,
-		[(int) Stat.GP] = 400,
-
-		[(int) Stat.DEF] = 0
-	};
-}
+namespace GearsetHelperPlugin;
 
 
 internal class MeldedItem {
@@ -119,15 +51,24 @@ internal struct MeldedMateria {
 
 internal class Gearset {
 
-	public ClassJobCategory? Category { get; set; }
+	public Gearset(List<MeldedItem>? items = null) {
+		Items = items ?? new();
+	}
+
+	// Player Information
 
 	public string? PlayerName { get; set; }
 
+	public byte? Tribe { get; set; }
+
 	public uint Class { get; set; }
+	public uint ActualClass { get; set; }
 
 	public byte Level { get; set; }
 
-	public uint ItemLevel { get; set; }
+	// Item Information
+
+	public bool HasCrystal { get; set; }
 
 	public int Unmelded { get; set; }
 
@@ -138,10 +79,6 @@ internal class Gearset {
 	public Dictionary<uint, ItemStat> Stats { get; } = new();
 
 	public Dictionary<uint, int> Materia { get; } = new();
-
-	public Gearset(List<MeldedItem>? items = null) {
-		Items = items ?? new();
-	}
 
 }
 

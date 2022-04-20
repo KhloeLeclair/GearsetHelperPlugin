@@ -3,7 +3,7 @@ using Lumina.Data;
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
 
-namespace GearsetExportPlugin.Sheets;
+namespace GearsetHelperPlugin.Sheets;
 
 [Sheet("ItemLevel")]
 public class ExtendedItemLevel : ItemLevel {

@@ -2,30 +2,22 @@ using ImGuiNET;
 using System;
 using System.Numerics;
 
-using GearsetExportPlugin.Ui.Helpers;
+using GearsetHelperPlugin.Ui;
 
-namespace GearsetExportPlugin;
+namespace GearsetHelperPlugin;
 
-// It is good to have this be disposable in general, in case you ever need it
-// to do any cleanup
 internal class PluginUI : IDisposable {
 
 	internal Plugin Plugin { get; }
 
-    private bool settingsVisible = false;
-    public bool SettingsVisible
-    {
-        get { return settingsVisible; }
-        set { settingsVisible = value; }
-    }
+	private readonly ExamineWindow ExamineHelper;
+	private readonly SettingsWindow Settings;
 
-	private ExamineHelper ExamineHelper { get; }
-
-    // passing in the image here just for simplicity
     public PluginUI(Plugin plugin) {
 		Plugin = plugin;
 
-		ExamineHelper = new ExamineHelper(this);
+		ExamineHelper = new ExamineWindow(this);
+		Settings = new SettingsWindow(this);
 
 		Plugin.Interface.UiBuilder.Draw += Draw;
 		Plugin.Interface.UiBuilder.OpenConfigUi += OpenConfig;
@@ -37,75 +29,11 @@ internal class PluginUI : IDisposable {
 	}
 
 	private void OpenConfig() {
-		SettingsVisible = true;
+		Settings.OpenSettings();
 	}
 
     private void Draw() {
-        DrawSettingsWindow();
-
+        Settings.Draw();
 		ExamineHelper.Draw();
-    }
-
-    public void DrawSettingsWindow()
-    {
-        if (!SettingsVisible)
-            return;
-
-        ImGui.SetNextWindowSize(new Vector2(425, 350), ImGuiCond.Appearing);
-        if (ImGui.Begin($"{Plugin.Name} Settings", ref settingsVisible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)) {
-
-			ImGui.TextWrapped("In order to export gearsets to Etro, you need to get your Token as described in Etro's API documentation.");
-
-			ImGui.Spacing();
-
-			/*
-			string username = Plugin.Config.EtroUsername ?? string.Empty;
-			string password = Plugin.Config.EtroPassword ?? string.Empty;
-
-			if (ImGui.InputText("Etro Username", ref username, 1024, ImGuiInputTextFlags.EnterReturnsTrue)) {
-				Plugin.Config.EtroUsername = string.IsNullOrEmpty(username) ? null : username;
-				Plugin.Config.Save();
-			}
-
-			if (ImGui.InputText("Etro Password", ref password, 1024, ImGuiInputTextFlags.EnterReturnsTrue | ImGuiInputTextFlags.Password)) {
-				Plugin.Config.EtroPassword = string.IsNullOrEmpty(password) ? null : password;
-				Plugin.Config.Save();
-			}*/
-
-			// can't ref a property, so use a local copy
-			string token = Plugin.Config.EtroApiKey ?? string.Empty;
-			if (ImGui.InputText("Etro API Key", ref token, 1024, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue)) {
-				Plugin.Config.EtroApiKey = string.IsNullOrEmpty(token) ? null : token;
-				Plugin.Config.Save();
-				Plugin.Exporter.ClearError();
-			}
-
-			ImGui.Spacing();
-
-			bool attach = Plugin.Config.AttachToExamine;
-			if (ImGui.Checkbox("Lock to Examine", ref attach)) {
-				Plugin.Config.AttachToExamine = attach;
-				Plugin.Config.Save();
-			}
-
-			ImGui.Indent();
-
-			int side = Plugin.Config.AttachSide;
-			if (ImGui.Combo("Side", ref side, "Left\x00Right")) {
-				Plugin.Config.AttachSide = side;
-				Plugin.Config.Save();
-			}
-
-			ImGui.Unindent();
-
-			ImGui.Spacing();
-
-			bool showItems = Plugin.Config.ShowItems;
-			if (ImGui.Checkbox("Show Items Section", ref showItems)) {
-				Plugin.Config.ShowItems = showItems;
-				Plugin.Config.Save();
-			}
-        }
-        ImGui.End();
     }
 }

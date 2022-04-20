@@ -1,5 +1,4 @@
-namespace GearsetExportPlugin;
-
+namespace GearsetHelperPlugin;
 
 internal enum GearSlot {
 	MainHand = 0,

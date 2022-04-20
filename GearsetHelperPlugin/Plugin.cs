@@ -7,7 +7,7 @@ using Dalamud.Game.Gui;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 
-namespace GearsetExportPlugin;
+namespace GearsetHelperPlugin;
 
 public class Plugin : IDalamudPlugin
 {
@@ -41,6 +41,8 @@ public class Plugin : IDalamudPlugin
 	[PluginService]
 	internal SigScanner SigScanner { get; init; }
 
+	internal GameFunctions Functions { get; }
+
 	internal Configuration Config { get; }
 	internal PluginUI Ui { get; }
 
@@ -52,14 +54,17 @@ public class Plugin : IDalamudPlugin
 		Config = Interface!.GetPluginConfig() as Configuration ?? new Configuration();
 		Config.Initialize(Interface);
 
+		Functions = new GameFunctions(this);
 		Ui = new PluginUI(this);
 		Exporter = new Exporter(this);
+
 
 	}
 	#pragma warning restore 8618
 
 	public void Dispose()
     {
+		Functions.Dispose();
         Ui.Dispose();
 		Exporter.Dispose();
     }

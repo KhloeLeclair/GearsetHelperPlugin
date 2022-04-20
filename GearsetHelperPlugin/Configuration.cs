@@ -2,17 +2,15 @@ using Dalamud.Configuration;
 using Dalamud.Plugin;
 using System;
 
-namespace GearsetExportPlugin;
+namespace GearsetHelperPlugin;
 
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 0;
 
-	public string? EtroUsername { get; set; } = null;
-	public string? EtroPassword { get; set; } = null;
-
 	public string? EtroApiKey { get; set; } = null;
+	public string? EtroRefreshKey { get; set; } = null;
 
 	public bool ShowItems { get; set; } = false;
 

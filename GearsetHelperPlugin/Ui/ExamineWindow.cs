@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Numerics;
 
 using Dalamud.Logging;
-using Dalamud.Game.ClientState.Objects.Enums;
+
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Enums;
 
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
@@ -18,12 +19,12 @@ using ImGuiNET;
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
 
-using GearsetExportPlugin.Sheets;
+using GearsetHelperPlugin.Sheets;
 
 
-namespace GearsetExportPlugin.Ui.Helpers;
+namespace GearsetHelperPlugin.Ui;
 
-internal class ExamineHelper : IDisposable {
+internal class ExamineWindow : IDisposable {
 
 	private PluginUI Ui { get; }
 
@@ -31,10 +32,14 @@ internal class ExamineHelper : IDisposable {
 	private readonly ExcelSheet<ExtendedItemLevel>? ItemLevelSheet;
 	private readonly ExcelSheet<Materia>? MateriaSheet;
 	private readonly ExcelSheet<ExtendedBaseParam>? ParamSheet;
+	private readonly ExcelSheet<Tribe>? TribeSheet;
+	private readonly ExcelSheet<ClassJob>? ClassSheet;
 
 	private readonly Dictionary<uint, ImGuiScene.TextureWrap?> ItemIcons = new();
 
-	internal ExamineHelper(PluginUI ui) {
+	private uint examineLoadStage = 4;
+
+	internal ExamineWindow(PluginUI ui) {
 		Ui = ui;
 
 		ItemIcons = new();
@@ -43,6 +48,10 @@ internal class ExamineHelper : IDisposable {
 		ItemLevelSheet = Ui.Plugin.DataManager.Excel.GetSheet<ExtendedItemLevel>();
 		MateriaSheet = Ui.Plugin.DataManager.Excel.GetSheet<Materia>();
 		ParamSheet = Ui.Plugin.DataManager.Excel.GetSheet<ExtendedBaseParam>();
+		TribeSheet = Ui.Plugin.DataManager.Excel.GetSheet<Tribe>();
+		ClassSheet = Ui.Plugin.DataManager.Excel.GetSheet<ClassJob>();
+
+		Ui.Plugin.Functions.ExamineOnRefresh += ExamineRefreshed;
 	}
 
 	public void Dispose() {
@@ -51,6 +60,14 @@ internal class ExamineHelper : IDisposable {
 
 		ItemIcons.Clear();
 		CachedGearset = null;
+
+		Ui.Plugin.Functions.ExamineOnRefresh -= ExamineRefreshed;
+	}
+
+	private void ExamineRefreshed(ushort menuId, int val, uint loadStage) {
+		// Just save the load state so our draw call knows if data is loaded or not.
+		if (loadStage == 1 || loadStage > examineLoadStage)
+			examineLoadStage = loadStage;
 	}
 
 	private Gearset? CachedGearset;
@@ -64,7 +81,7 @@ internal class ExamineHelper : IDisposable {
 		return icon;
 	}
 
-	internal void DrawStatTable(IEnumerable<ItemStat> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false) {
+	internal static void DrawStatTable(IEnumerable<ItemStat> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false) {
 		int cols = 8;
 		if (includeBase)
 			cols += 2;
@@ -94,9 +111,14 @@ internal class ExamineHelper : IDisposable {
 
 		ImGui.TableHeadersRow();
 
-		foreach (var stat in stats) {
-			if (!paramDictionary.TryGetValue(stat.StatID, out var param))
-				continue;
+		var data = stats
+			.Where(stat => paramDictionary.ContainsKey(stat.StatID))
+			.Select<ItemStat, (ItemStat, ExtendedBaseParam)>(stat => (stat, paramDictionary[stat.StatID]))
+			.OrderBy(entry => entry.Item2.OrderPriority);
+
+		foreach (var entry in data) {
+			var stat = entry.Item1;
+			var param = entry.Item2;
 
 			ImGui.TableNextRow();
 
@@ -156,6 +178,9 @@ internal class ExamineHelper : IDisposable {
 	}
 
 	internal unsafe void Draw() {
+		if (ItemSheet == null || ItemLevelSheet == null || MateriaSheet == null || ParamSheet == null || TribeSheet == null || ClassSheet == null)
+			return;
+
 		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
 		if (examineAddon == null || !examineAddon->IsVisible) {
 			CachedGearset = null;
@@ -163,12 +188,12 @@ internal class ExamineHelper : IDisposable {
 			return;
 		}
 
-		if (ItemSheet == null || ItemLevelSheet == null || MateriaSheet == null || ParamSheet == null)
-			return;
-
 		UpdateGearset();
-		if (CachedGearset == null)
+
+		if (CachedGearset == null) {
+			Ui.Plugin.Exporter.ClearError();
 			return;
+		}
 
 		float scale = ImGui.GetFontSize() / 17;
 
@@ -205,7 +230,7 @@ internal class ExamineHelper : IDisposable {
 		ImGui.SetNextWindowSize(new Vector2(370 * scale, 200 * scale), ImGuiCond.FirstUseEver);
 		ImGui.SetNextWindowSizeConstraints(new Vector2(370 * scale, 200 * scale), new Vector2(left ? 370 * scale : float.MaxValue, float.MaxValue));
 
-		if (ImGui.Begin("GearsetHelper", flags | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoFocusOnAppearing)) {
+		if (ImGui.Begin("Gearset Helper", flags | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoFocusOnAppearing)) {
 
 			if (Ui.Plugin.Exporter.Exporting) {
 				ImGui.Text("Exporting...");
@@ -344,6 +369,11 @@ internal class ExamineHelper : IDisposable {
 		if (ItemSheet == null || ItemLevelSheet == null || MateriaSheet == null || ParamSheet == null)
 			return;
 
+		if (examineLoadStage < 4) {
+			CachedGearset = null;
+			return;
+		}
+
 		if (CachedGearset == null) {
 			CachedGearset = GetGearset();
 			return;
@@ -401,7 +431,7 @@ internal class ExamineHelper : IDisposable {
 	}
 
 	private Gearset? GetGearset() {
-		if (ItemSheet == null || ItemLevelSheet == null || MateriaSheet == null || ParamSheet == null)
+		if (ItemSheet == null || ItemLevelSheet == null || MateriaSheet == null || ParamSheet == null || ClassSheet == null || TribeSheet == null)
 			return null;
 
 		List<MeldedItem>? items = GetItems();
@@ -412,6 +442,8 @@ internal class ExamineHelper : IDisposable {
 
 		uint totalLevel = 0;
 		uint levelCount = 0;
+
+		ExtendedClassJobCategory? jobCategory = null;
 
 		foreach (MeldedItem item in items) {
 			var itemData = item.GetItem(ItemSheet);
@@ -429,8 +461,17 @@ internal class ExamineHelper : IDisposable {
 			}
 
 			// Main Hand
-			if (itemData.EquipSlotCategory.Value?.MainHand != 0)
-				gearset.Category = itemData.ClassJobCategory.Value;
+			var cjc = itemData.ExtendedClassJobCategory;
+			var esc = itemData.EquipSlotCategory.Value;
+			if (cjc != null && esc != null) {
+				if (esc.MainHand != 0)
+					jobCategory = cjc.Value;
+				else if (esc.OffHand != 0 && jobCategory == null)
+					jobCategory = cjc.Value;
+
+				if (esc.SoulCrystal != 0)
+					gearset.HasCrystal = true;
+			}
 
 			//PluginLog.Log($"Item: {itemData.Name} -- Equip Slot: {itemData.EquipSlotCategory.Row} -- {itemData.EquipSlotCategory.Value?.MainHand}");
 
@@ -439,6 +480,11 @@ internal class ExamineHelper : IDisposable {
 				short value = pd.BaseParamValue;
 
 				if (row == 0 || value == 0)
+					continue;
+
+				// Specifically disallow "Main Attribute" and "Secondary Attribute"
+				// from showing up.
+				if (row == 55 || row == 56)
 					continue;
 
 				// Get the Parameter
@@ -451,11 +497,8 @@ internal class ExamineHelper : IDisposable {
 				}
 
 				// Save this stat to the gearset
-				if (!gearset.Stats.ContainsKey(row)) {
+				if (!gearset.Stats.ContainsKey(row))
 					gearset.Stats.Add(row, new(row));
-					if (BaseStats.Lvl90_Stats.ContainsKey(row))
-						gearset.Stats[row].Base = BaseStats.Lvl90_Stats[row];
-				}
 
 				gearset.Stats[row].Gear += value;
 
@@ -542,11 +585,8 @@ internal class ExamineHelper : IDisposable {
 			foreach (var stat in item.Stats.Values) {
 				stat.UpdateWaste();
 
-				if (!gearset.Stats.ContainsKey(stat.StatID)) {
+				if (!gearset.Stats.ContainsKey(stat.StatID))
 					gearset.Stats.Add(stat.StatID, new(stat.StatID));
-					if (BaseStats.Lvl90_Stats.ContainsKey(stat.StatID))
-						gearset.Stats[stat.StatID].Base = BaseStats.Lvl90_Stats[stat.StatID];
-				}
 
 				var gs = gearset.Stats[stat.StatID];
 				gs.Delta += stat.Delta;
@@ -555,16 +595,92 @@ internal class ExamineHelper : IDisposable {
 		}
 
 		var player = GetActor();
+		gearset.Level = 90;
 		if (player != null) {
 			gearset.PlayerName = player.Name.ToString();
 			gearset.Level = player.Level;
-			gearset.Class = player.ClassJob.Id;
+			gearset.Tribe = player.Customize[(int) CustomizeIndex.Tribe];
 		}
 
-		if (levelCount > 0)
-			gearset.ItemLevel = totalLevel / levelCount;
+		// Determine the class from the equipped gear.
+		ClassJob? job = null;
+		if (jobCategory != null) {
+			// First, search for a job specifically. No classes.
+			foreach(var row in ClassSheet) {
+				if (row.JobIndex == 0)
+					continue;
+
+				if (jobCategory.Classes[row.RowId]) {
+					gearset.Class = row.RowId;
+					gearset.ActualClass = row.RowId;
+					job = row;
+					break;
+				}
+			}
+
+			// Widen the search to ANY class if we need to.
+			if (job == null) {
+				foreach (var row in ClassSheet) {
+					if (jobCategory.Classes[row.RowId]) {
+						gearset.Class = row.RowId;
+						gearset.ActualClass = row.RowId;
+						job = row;
+						break;
+					}
+				}
+			}
+
+			// If we don't have a soul crystal, and this job has
+			// a parent job, then switch it up for stat calculation
+			// but leave the class set on gearset for exporting
+			// correctly.
+			if (job != null && ! gearset.HasCrystal) {
+				var parent = job.ClassJobParent.Value;
+				if (parent != null) {
+					job = parent;
+					gearset.ActualClass = parent.RowId;
+				}
+			}
+		}
+
+		// Apply base stats.
+		foreach (var entry in gearset.Stats)
+			entry.Value.Base = Data.GetBaseStatAtLevel((Stat) entry.Key, gearset.Level);
+
+		// If we have a job, modify the base stats.
+		if (job != null) {
+			ModifyStat(gearset, Stat.STR, job.ModifierStrength / 100f);
+			ModifyStat(gearset, Stat.DEX, job.ModifierDexterity / 100f);
+			ModifyStat(gearset, Stat.VIT, job.ModifierVitality / 100f);
+			ModifyStat(gearset, Stat.INT, job.ModifierIntelligence / 100f);
+			ModifyStat(gearset, Stat.MND, job.ModifierMind / 100f);
+			ModifyStat(gearset, Stat.PIE, job.ModifierPiety / 100f);
+		}
+
+		// If we have a tribe, modify the base stats.
+		if (gearset.Tribe.HasValue) {
+			var tribeData = TribeSheet.GetRow(gearset.Tribe.Value);
+			if (tribeData != null) {
+				ModifyStat(gearset, Stat.STR, extra: tribeData.STR);
+				ModifyStat(gearset, Stat.DEX, extra: tribeData.DEX);
+				ModifyStat(gearset, Stat.VIT, extra: tribeData.VIT);
+				ModifyStat(gearset, Stat.INT, extra: tribeData.INT);
+				ModifyStat(gearset, Stat.MND, extra: tribeData.MND);
+				ModifyStat(gearset, Stat.PIE, extra: tribeData.PIE);
+			}
+		}
 
 		return gearset;
+	}
+
+	private static void ModifyStat(Gearset gearset, Stat stat, float multiplier = 1f, int extra = 0) {
+		if (!gearset.Stats.TryGetValue((uint)stat, out var value) || value.Base <= 0)
+			return;
+
+		if (multiplier != 1)
+			value.Base = (int) Math.Floor(value.Base * multiplier);
+
+		value.Base += extra;
 	}
 
 	private unsafe PlayerCharacter? GetActor() {
@@ -572,17 +688,21 @@ internal class ExamineHelper : IDisposable {
 		if (examineAddon == null || !examineAddon->IsVisible)
 			return null;
 
-		var rawPlayers = Ui.Plugin.ObjectTable
+		Lazy<Dictionary<string, PlayerCharacter>> players = new(() => {
+			var rawPlayers = Ui.Plugin.ObjectTable
 			.Where(obj => obj is PlayerCharacter && obj.IsValid())
 			.Cast<PlayerCharacter>();
 
-		var players = new Dictionary<string, PlayerCharacter>();
+			var result = new Dictionary<string, PlayerCharacter>();
 
-		foreach(var entry in rawPlayers) {
-			string name = entry.Name.ToString();
-			if (!players.ContainsKey(name))
-				players[name] = entry;
-		}
+			foreach (var entry in rawPlayers) {
+				string name = entry.Name.TextValue;
+				if (!result.ContainsKey(name))
+					result[name] = entry;
+			}
+
+			return result;
+		});
 
 		var nodeList = examineAddon->UldManager.NodeList;
 		ushort count = examineAddon->UldManager.NodeListCount;
@@ -601,7 +721,7 @@ internal class ExamineHelper : IDisposable {
 
 			string? result = txt->NodeText.ToString();
 
-			if (result != null && players.TryGetValue(result, out PlayerCharacter? player))
+			if (!string.IsNullOrEmpty(result) && players.Value.TryGetValue(result, out PlayerCharacter? player))
 				return player;
 		}
 

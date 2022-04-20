@@ -5,16 +5,15 @@ using Lumina.Excel.GeneratedSheets;
 
 namespace GearsetHelperPlugin.Sheets;
 
-[Sheet("BaseParam")]
-public class ExtendedBaseParam : BaseParam {
+[Sheet("ClassJobCategory")]
+public class ExtendedClassJobCategory : BaseParam {
 
-	public readonly ushort[] EquipSlotCategoryPct = new ushort[22];
+	public readonly bool[] Classes = new bool[41];
 
 	public override void PopulateData(RowParser parser, GameData gameData, Language language) {
 		base.PopulateData(parser, gameData, language);
 
-		for(int i = 1; i < EquipSlotCategoryPct.Length; i++) {
-			EquipSlotCategoryPct[i] = parser.ReadColumn<ushort>(i + 3);
-		}
+		for (int i = 0; i < Classes.Length; i++)
+			Classes[i] = parser.ReadColumn<bool>(i + 1);
 	}
 }
