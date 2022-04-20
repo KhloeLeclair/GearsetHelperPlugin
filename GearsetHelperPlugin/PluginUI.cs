@@ -51,7 +51,7 @@ internal class PluginUI : IDisposable {
         if (!SettingsVisible)
             return;
 
-        ImGui.SetNextWindowSize(new Vector2(425, 250), ImGuiCond.Appearing);
+        ImGui.SetNextWindowSize(new Vector2(425, 350), ImGuiCond.Appearing);
         if (ImGui.Begin($"{Plugin.Name} Settings", ref settingsVisible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)) {
 
 			ImGui.TextWrapped("In order to export gearsets to Etro, you need to get your Token as described in Etro's API documentation.");
@@ -82,12 +82,29 @@ internal class PluginUI : IDisposable {
 
 			ImGui.Spacing();
 
-			bool showItems = Plugin.Config.DisplayItemsDebug;
-			if (ImGui.Checkbox("(DEBUG) Show Items Section", ref showItems)) {
-				Plugin.Config.DisplayItemsDebug = showItems;
+			bool attach = Plugin.Config.AttachToExamine;
+			if (ImGui.Checkbox("Lock to Examine", ref attach)) {
+				Plugin.Config.AttachToExamine = attach;
 				Plugin.Config.Save();
 			}
 
+			ImGui.Indent();
+
+			int side = Plugin.Config.AttachSide;
+			if (ImGui.Combo("Side", ref side, "Left\x00Right")) {
+				Plugin.Config.AttachSide = side;
+				Plugin.Config.Save();
+			}
+
+			ImGui.Unindent();
+
+			ImGui.Spacing();
+
+			bool showItems = Plugin.Config.ShowItems;
+			if (ImGui.Checkbox("Show Items Section", ref showItems)) {
+				Plugin.Config.ShowItems = showItems;
+				Plugin.Config.Save();
+			}
         }
         ImGui.End();
     }

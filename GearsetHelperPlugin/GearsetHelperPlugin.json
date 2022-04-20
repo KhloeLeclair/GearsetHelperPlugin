@@ -3,6 +3,7 @@
 	"Name": "Gearset Helper Plugin",
 	"Punchline": "Display estimated stats with Examine, and export gear to Etro/Ariyala.",
 	"Description": "Displays extra information about a character's gearsets when Examine is open, and makes it easy to export gearsets to Etro or Ariyala.",
+	"RepoUrl": "https://github.com/KhloeLeclair/GearsetHelperPlugin",
 	"InternalName": "GearsetHelperPlugin",
 	"ApplicableVersion": "any",
 	"Tags": [

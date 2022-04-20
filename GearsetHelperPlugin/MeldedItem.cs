@@ -151,6 +151,7 @@ internal class ItemStat {
 	public uint StatID { get; }
 
 	public int Base { get; set; }
+	public int Gear { get; set; }
 	public int Delta { get; set; }
 
 	public int Waste { get; set; }
@@ -161,8 +162,10 @@ internal class ItemStat {
 		StatID = id;
 	}
 
-	public int Full => Base + Delta;
-	public int Value => Base + Delta - Waste;
+	public int Full => Base + Gear + Delta;
+	public int Value => Base + Gear + Delta - Waste;
+
+	public int Remaining => Limit - Value;
 
 	public void UpdateWaste() {
 		if (Full > Limit && Limit > 0) {

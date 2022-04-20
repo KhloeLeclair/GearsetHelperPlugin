@@ -14,7 +14,10 @@ public class Configuration : IPluginConfiguration
 
 	public string? EtroApiKey { get; set; } = null;
 
-	public bool DisplayItemsDebug { get; set; } = false;
+	public bool ShowItems { get; set; } = false;
+
+	public bool AttachToExamine { get; set; } = true;
+	public int AttachSide { get; set; } = 1;
 
     // the below exist just to make saving less cumbersome
 

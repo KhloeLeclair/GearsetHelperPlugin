@@ -64,6 +64,97 @@ internal class ExamineHelper : IDisposable {
 		return icon;
 	}
 
+	internal void DrawStatTable(IEnumerable<ItemStat> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false) {
+		int cols = 8;
+		if (includeBase)
+			cols += 2;
+		if (includeRemaining)
+			cols += 2;
+
+		ImGui.BeginTable("StatTable", cols, ImGuiTableFlags.RowBg);
+		ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch, 3f);
+
+		if (includeBase) {
+			ImGui.TableSetupColumn("Base", ImGuiTableColumnFlags.None, 1f);
+			ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+		}
+
+		ImGui.TableSetupColumn("Gear", ImGuiTableColumnFlags.None, 1f);
+		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+		ImGui.TableSetupColumn("Meld", ImGuiTableColumnFlags.None, 1f);
+		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+		ImGui.TableSetupColumn("Over", ImGuiTableColumnFlags.None, 1f);
+		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+		ImGui.TableSetupColumn("Total", ImGuiTableColumnFlags.None, 1f);
+
+		if (includeRemaining) {
+			ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+			ImGui.TableSetupColumn("Cap", ImGuiTableColumnFlags.None, 1f);
+		}
+
+		ImGui.TableHeadersRow();
+
+		foreach (var stat in stats) {
+			if (!paramDictionary.TryGetValue(stat.StatID, out var param))
+				continue;
+
+			ImGui.TableNextRow();
+
+			ImGui.TableNextColumn();
+			ImGui.Text(param.Name);
+
+			if (includeBase) {
+				ImGui.TableNextColumn();
+				if (stat.Base > 0)
+					ImGui.TextColored(ImGuiColors.DalamudGrey, stat.Base.ToString());
+				else
+					ImGui.TextColored(ImGuiColors.ParsedGrey, stat.Base.ToString());
+
+				ImGui.TableNextColumn();
+				ImGui.TextColored(ImGuiColors.DalamudGrey3, "+");
+			}
+
+			ImGui.TableNextColumn();
+			ImGui.Text(stat.Gear.ToString());
+
+			ImGui.TableNextColumn();
+			ImGui.TextColored(ImGuiColors.DalamudGrey3, "+");
+
+			ImGui.TableNextColumn();
+			if (stat.Delta > 0)
+				ImGui.TextColored(ImGuiColors.ParsedGreen, stat.Delta.ToString());
+			else
+				ImGui.TextColored(ImGuiColors.DalamudGrey, stat.Delta.ToString());
+
+			ImGui.TableNextColumn();
+			ImGui.TextColored(ImGuiColors.DalamudGrey3, "-");
+
+			ImGui.TableNextColumn();
+			if (stat.Waste > 0)
+				ImGui.TextColored(ImGuiColors.DalamudRed, stat.Waste.ToString());
+			else
+				ImGui.TextColored(ImGuiColors.ParsedGrey, stat.Waste.ToString());
+
+			ImGui.TableNextColumn();
+			ImGui.TextColored(ImGuiColors.DalamudGrey3, "=");
+
+			ImGui.TableNextColumn();
+			ImGui.Text(stat.Value.ToString());
+
+			if (includeRemaining) {
+				ImGui.TableNextColumn();
+				ImGui.TableNextColumn();
+				int remaining = stat.Remaining;
+				if (remaining <= 0)
+					ImGui.TextColored(ImGuiColors.ParsedGreen, stat.Remaining.ToString());
+				else
+					ImGui.TextColored(ImGuiColors.DalamudYellow, stat.Remaining.ToString());
+			}
+		}
+
+		ImGui.EndTable();
+	}
+
 	internal unsafe void Draw() {
 		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
 		if (examineAddon == null || !examineAddon->IsVisible) {
@@ -79,30 +170,57 @@ internal class ExamineHelper : IDisposable {
 		if (CachedGearset == null)
 			return;
 
-		var root = examineAddon->RootNode;
-		if (root == null)
-			return;
+		float scale = ImGui.GetFontSize() / 17;
 
-		Vector2 pos = ImGuiHelpers.MainViewport.Pos
-			+ new Vector2(examineAddon->X, examineAddon->Y)
-			+ Vector2.UnitX * (root->Width * examineAddon->Scale)
-			+ Vector2.UnitX * (ImGui.GetStyle().FramePadding.X + ImGui.GetStyle().FrameBorderSize)
-			+ Vector2.UnitY * (ImGui.GetStyle().FramePadding.Y + ImGui.GetStyle().FrameBorderSize);
+		ImGuiWindowFlags flags;
+		bool left = false;
+		if (Ui.Plugin.Config.AttachToExamine) {
+			left = Ui.Plugin.Config.AttachSide == 0;
+			var root = examineAddon->RootNode;
+			if (root == null)
+				return;
 
-		ImGui.SetNextWindowSize(new Vector2(375, 330), ImGuiCond.FirstUseEver);
-		ImGui.SetNextWindowSizeConstraints(new Vector2(400, 330), new Vector2(400, float.MaxValue));
-		ImGui.SetNextWindowPos(pos);
+			Vector2 pos = ImGuiHelpers.MainViewport.Pos
+				+ new Vector2(examineAddon->X, examineAddon->Y)
+				+ Vector2.UnitY * (ImGui.GetStyle().FramePadding.Y + ImGui.GetStyle().FrameBorderSize);
 
-		if (ImGui.Begin("GearsetHelper", ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoMove)) {
+			if (left) {
+				pos = pos
+					- Vector2.UnitX * 370 * scale
+					- Vector2.UnitX * (ImGui.GetStyle().FramePadding.X + ImGui.GetStyle().FrameBorderSize);
+
+			} else {
+				pos = pos
+					
+					+ Vector2.UnitX * (root->Width * examineAddon->Scale)
+					+ Vector2.UnitX * (ImGui.GetStyle().FramePadding.X + ImGui.GetStyle().FrameBorderSize);
+			}
+
+			ImGui.SetNextWindowPos(pos);
+			flags = ImGuiWindowFlags.NoMove;
+
+		} else
+			flags = ImGuiWindowFlags.None;
+
+		ImGui.SetNextWindowSize(new Vector2(370 * scale, 200 * scale), ImGuiCond.FirstUseEver);
+		ImGui.SetNextWindowSizeConstraints(new Vector2(370 * scale, 200 * scale), new Vector2(left ? 370 * scale : float.MaxValue, float.MaxValue));
+
+		if (ImGui.Begin("GearsetHelper", flags | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoFocusOnAppearing)) {
 
 			if (Ui.Plugin.Exporter.Exporting) {
 				ImGui.Text("Exporting...");
 			} else {
-				if (ImGui.Button("Export to Ariyala"))
+				ImGui.Text("Export To:");
+				ImGui.SameLine();
+
+				if (ImGui.Button("Ariyala"))
 					Ui.Plugin.Exporter.ExportAriyala(CachedGearset);
 
-				if (Ui.Plugin.Exporter.CanExportEtro && ImGui.Button("Export to Etro"))
-					Ui.Plugin.Exporter.ExportEtro(CachedGearset);
+				if (Ui.Plugin.Exporter.CanExportEtro) {
+					ImGui.SameLine();
+					if (ImGui.Button("Etro"))
+						Ui.Plugin.Exporter.ExportEtro(CachedGearset);
+				}
 
 				if (Ui.Plugin.Exporter.Error != null) {
 					ImGui.TextColored(ImGuiColors.DalamudYellow, "Error:");
@@ -111,40 +229,7 @@ internal class ExamineHelper : IDisposable {
 			}
 
 			if (ImGui.CollapsingHeader("Stats", ImGuiTreeNodeFlags.DefaultOpen)) {
-				/*ImGui.TextColored(ImGuiColors.DalamudGrey, "Item Level");
-				ImGui.Indent(20);
-				ImGui.Text(CachedGearset.Level.ToString());
-				ImGui.Unindent(20);*/
-
-				foreach (var stat in CachedGearset.Stats.Values) {
-					if (!CachedGearset.Params.TryGetValue(stat.StatID, out var param))
-						continue;
-
-					ImGui.TextColored(ImGuiColors.DalamudGrey, param.Name);
-					ImGui.Indent(20);
-					if (stat.Base > 0) {
-						ImGui.Text(stat.Base.ToString());
-						ImGui.SameLine();
-					}
-					if (stat.Delta > 0) {
-						ImGui.TextColored(ImGuiColors.DalamudGrey, "+");
-						ImGui.SameLine();
-						ImGui.Text(stat.Delta.ToString());
-						ImGui.SameLine();
-					}
-					if (stat.Waste > 0) {
-						ImGui.TextColored(ImGuiColors.DalamudGrey, "-");
-						ImGui.SameLine();
-						ImGui.Text(stat.Waste.ToString());
-						ImGui.SameLine();
-					}
-					if (stat.Base > 0 || stat.Delta > 0 || stat.Waste > 0) {
-						ImGui.TextColored(ImGuiColors.DalamudGrey, "=");
-						ImGui.SameLine();
-					}
-					ImGui.Text(stat.Value.ToString());
-					ImGui.Unindent(20);
-				}
+				DrawStatTable(CachedGearset.Stats.Values, CachedGearset.Params, true);
 			}
 
 			if (CachedGearset.Materia.Count > 0 || CachedGearset.Unmelded > 0) {
@@ -193,20 +278,21 @@ internal class ExamineHelper : IDisposable {
 						ImGui.TableNextRow();
 
 						var icon = mat == null ? null : GetIcon(mat.Icon);
+						int height = icon == null ? 0 : Math.Min(icon.Height, (int)(32 * scale));
 
 						ImGui.TableSetColumnIndex(0);
 
 						if (icon != null)
-							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (icon.Height - ImGui.GetFontSize()) / 2);
+							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 
 						ImGui.Text($" {entry.Value}");
 
 						ImGui.TableSetColumnIndex(1);
 
 						if (icon != null) {
-							ImGui.Image(icon.ImGuiHandle, new Vector2(icon.Width, icon.Height));
+							ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
 							ImGui.SameLine();
-							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (icon.Height - ImGui.GetFontSize()) / 2);
+							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						}
 
 						if (mat == null)
@@ -218,60 +304,36 @@ internal class ExamineHelper : IDisposable {
 				}
 			}
 
-			if (Ui.Plugin.Config.DisplayItemsDebug && ImGui.CollapsingHeader("Items")) {
+			if (Ui.Plugin.Config.ShowItems && ImGui.CollapsingHeader("Items")) {
+				bool first = true;
+
 				foreach (var item in CachedGearset.Items) {
 					var data = item.GetItem(ItemSheet);
 					if (data == null)
 						continue;
 
+					if (first)
+						first = false;
+					else {
+						ImGui.Spacing();
+						ImGui.Separator();
+						ImGui.Spacing();
+					}
+
 					var levelData = ItemLevelSheet.GetRow(data.LevelItem.Row);
 
 					var icon = GetIcon(data.Icon);
 					if (icon != null) {
+						int height = Math.Min(icon.Height, (int) (32 * scale));
 
-						ImGui.Image(icon.ImGuiHandle, new Vector2(icon.Width, icon.Height));
+						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
 						ImGui.SameLine();
-						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (icon.Height - ImGui.GetFontSize()) / 2);
+						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 					}
 
 					ImGui.Text(data.Name);
-					ImGui.Indent(20);
 
-					foreach (var stat in item.Stats.Values) {
-						if (!CachedGearset.Params.TryGetValue(stat.StatID, out var param))
-							continue;
-
-						ImGui.TextColored(ImGuiColors.DalamudGrey, param.Name);
-						ImGui.Indent(20);
-						if (stat.Base > 0) {
-							ImGui.Text(stat.Base.ToString());
-							ImGui.SameLine();
-						}
-						if (stat.Delta > 0) {
-							ImGui.TextColored(ImGuiColors.DalamudGrey, "+");
-							ImGui.SameLine();
-							ImGui.Text(stat.Delta.ToString());
-							ImGui.SameLine();
-						}
-						if (stat.Waste > 0) {
-							ImGui.TextColored(ImGuiColors.DalamudGrey, "-");
-							ImGui.SameLine();
-							ImGui.Text(stat.Waste.ToString());
-							ImGui.SameLine();
-						}
-						if (stat.Base > 0 || stat.Delta > 0 || stat.Waste > 0) {
-							ImGui.TextColored(ImGuiColors.DalamudGrey, "=");
-							ImGui.SameLine();
-						}
-						ImGui.Text(stat.Value.ToString());
-						ImGui.Unindent(20);
-					}
-
-					ImGui.Unindent(20);
-
-					ImGui.Spacing();
-					ImGui.Separator();
-					ImGui.Spacing();
+					DrawStatTable(item.Stats.Values, CachedGearset.Params, false, true);
 				}
 			}
 		}
@@ -392,10 +454,10 @@ internal class ExamineHelper : IDisposable {
 				if (!gearset.Stats.ContainsKey(row)) {
 					gearset.Stats.Add(row, new(row));
 					if (BaseStats.Lvl90_Stats.ContainsKey(row))
-						gearset.Stats[row].Base += BaseStats.Lvl90_Stats[row];
+						gearset.Stats[row].Base = BaseStats.Lvl90_Stats[row];
 				}
 
-				gearset.Stats[row].Base += value;
+				gearset.Stats[row].Gear += value;
 
 				// Save this stat to the item
 				if (!item.Stats.ContainsKey(row)) {
@@ -408,7 +470,7 @@ internal class ExamineHelper : IDisposable {
 					);
 				}
 
-				item.Stats[row].Base += value;
+				item.Stats[row].Gear += value;
 			}
 
 			// For HQ items, add the HQ bonus to the stats.
@@ -420,8 +482,8 @@ internal class ExamineHelper : IDisposable {
 					if (row == 0 || value == 0 || ! item.Stats.ContainsKey(row))
 						continue;
 
-					item.Stats[row].Base += value;
-					gearset.Stats[row].Base += value;
+					item.Stats[row].Gear += value;
+					gearset.Stats[row].Gear += value;
 				}
 
 			// Now, check each of the melded materia.
@@ -483,7 +545,7 @@ internal class ExamineHelper : IDisposable {
 				if (!gearset.Stats.ContainsKey(stat.StatID)) {
 					gearset.Stats.Add(stat.StatID, new(stat.StatID));
 					if (BaseStats.Lvl90_Stats.ContainsKey(stat.StatID))
-						gearset.Stats[stat.StatID].Base += BaseStats.Lvl90_Stats[stat.StatID];
+						gearset.Stats[stat.StatID].Base = BaseStats.Lvl90_Stats[stat.StatID];
 				}
 
 				var gs = gearset.Stats[stat.StatID];
