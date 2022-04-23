@@ -140,25 +140,46 @@ internal static class Data {
 		}
 	}
 
-	[MemberNotNull(nameof(_Food))]
+	private static List<Food>? _Medicine;
+	internal static List<Food> Medicine {
+		get {
+			if (_Medicine is null)
+				LoadFood();
+
+			return _Medicine;
+		}
+	}
+
+	[MemberNotNull(nameof(_Food), nameof(_Medicine))]
 	private static void LoadFood() {
 		_Food = new List<Food>();
+		_Medicine = new List<Food>();
 
 		if (!CheckSheets())
 			return;
 
 		foreach(ExtendedItem item in ItemSheet) {
-			/*uint ilvl = item.LevelItem.Row;
-			if (ilvl < _FoodMinIlvl && ilvl < _FoodMinIlvlDoHL)
-				continue;*/
-
 			ItemAction? action = item.ItemAction.Value;
-			if (action is not null && action.DataHQ[0] == 48) {
+			if (action is null)
+				continue;
+
+			if (action.DataHQ[0] == 48) {
+				// Food
 				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
 				if (food is not null) {
 					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
 					fdata.UpdateStats(food);
 					_Food.Add(fdata);
+				}
+			}
+
+			if (action.DataHQ[0] == 49) {
+				// Medicine
+				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
+				if (food is not null) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
+					fdata.UpdateStats(food);
+					_Medicine.Add(fdata);
 				}
 			}
 		}

@@ -10,7 +10,7 @@ using Dalamud.Game.Gui;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 
-using GearsetHelperPlugin.Models;
+using GearsetHelperPlugin.Sheets;
 
 namespace GearsetHelperPlugin;
 
@@ -85,4 +85,5 @@ public class Plugin : IDalamudPlugin
 		Exporter.Dispose();
 		Functions.Dispose();
     }
+
 }

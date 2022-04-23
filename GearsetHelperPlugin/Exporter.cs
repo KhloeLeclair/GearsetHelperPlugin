@@ -45,6 +45,11 @@ internal class Exporter : IDisposable {
 		}
 	}
 
+	public Task<ExportResponse> ExportTeamcraft(EquipmentSet gearset) {
+		return Task.Run(() => Task_ExportTeamcraft(gearset));
+	}
+
+
 	public Task<ExportResponse> ExportEtro(EquipmentSet gearset) {
 		return Task.Run(() => Task_ExportEtro(gearset));
 	}
@@ -73,6 +78,49 @@ internal class Exporter : IDisposable {
 		public string? Url { get; set; }
 		public string? Error { get; set; }
 	}
+
+	#region Teamcraft Export
+
+	private async Task<ExportResponse> Task_ExportTeamcraft(EquipmentSet gearset) {
+		var result = new ExportResponse();
+
+		try {
+
+			Dictionary<uint, int> items = new();
+
+			foreach (var item in gearset.Items) {
+				Item? data = item.Row();
+				var cat = data?.EquipSlotCategory.Value;
+				if (cat is null || cat.SoulCrystal == 1)
+					continue;
+
+				if (items.ContainsKey(item.ID))
+					items[item.ID]++;
+				else
+					items[item.ID] = 1;
+			}
+
+			if (gearset.Food is not null)
+				items[gearset.Food.ItemID] = 1;
+
+			if (gearset.Medicine is not null)
+				items[gearset.Medicine.ItemID] = 1;
+
+			string packed = string.Join(';', items.Select(x => $"{x.Key},null,{x.Value}"));
+			byte[] bytes = Encoding.UTF8.GetBytes(packed);
+			string encoded = Convert.ToBase64String(bytes);
+
+			result.Url = $"https://ffxivteamcraft.com/import/{encoded}";
+
+		} catch (Exception ex) {
+			PluginLog.Error($"An error occurred while exporting gearset to Teamcraft.\nDetails: {ex}");
+			result.Error = "An error occurred. See the log for details.";
+		}
+
+		return result;
+	}
+
+	#endregion
 
 	#region Etro Export
 
@@ -289,6 +337,14 @@ internal class Exporter : IDisposable {
 
 			if (gearset.Food is not null)
 				obj.Add("food", gearset.Food.FoodID);
+
+			if (gearset.Medicine is not null)
+				obj.Add("medicine", gearset.Medicine.FoodID);
+
+			if (jobData.Role == 0 && gearset.HasCrystal)
+				obj.Add("buffs", new JObject() {
+					{ "specialist", true }
+				});
 
 			PluginLog.Information($"Result:\n{obj.ToString(Formatting.None)}");
 
@@ -537,6 +593,9 @@ internal class Exporter : IDisposable {
 					materiaData.Add($"{mappedSlot}-{rawItem.ID}", new JArray(melds));
 			}
 
+			if (gearset.Food is not null)
+				items.Add("food", gearset.Food.ItemID);
+
 			var datasets = new JObject() {
 				[job] = new JObject() {
 					["normal"] = new JObject() {
@@ -580,6 +639,10 @@ internal class Exporter : IDisposable {
 			if (!ARIYALA_RACE_ID_MAP.TryGetValue(gearset.Tribe, out uint race))
 				race = 0;
 
+			var inv = new JArray(gearset.Items.Select(x => x.ID).ToArray());
+			if (gearset.Food is not null)
+				inv.Add(gearset.Food.ItemID);
+
 			var obj = new JObject {
 				{ "version", 6 },
 				{ "content", job },
@@ -587,7 +650,7 @@ internal class Exporter : IDisposable {
 				{ "raceID", race },
 				{ "level", 90 },
 				{ "filter", filter },
-				{ "myInventory", new JArray(gearset.Items.Select(x => x.ID).ToArray()) }
+				{ "myInventory", inv }
 			};
 
 			PluginLog.Information($"Result:\n{obj.ToString(Newtonsoft.Json.Formatting.None)}");

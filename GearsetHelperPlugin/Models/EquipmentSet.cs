@@ -49,6 +49,12 @@ internal class EquipmentSet {
 	public Food? Food { get; set; }
 
 	/// <summary>
+	/// Medicine to apply to the stats.
+	/// </summary>
+	public Food? Medicine { get; set; }
+
+
+	/// <summary>
 	/// Whether or not this equipment set includes a soul crystal.
 	/// </summary>
 	public bool HasCrystal { get; set; }
@@ -87,6 +93,8 @@ internal class EquipmentSet {
 	#region Relevant Foods
 
 	public List<Food> RelevantFood { get; } = new();
+
+	public List<Food> RelevantMedicine { get; } = new();
 
 	#endregion
 
@@ -302,6 +310,79 @@ internal class EquipmentSet {
 		});
 	}
 
+	public void CalculateRelevantMedicine() {
+		RelevantMedicine.Clear();
+
+		Dictionary<Food, int> matches = new();
+		Dictionary<Food, int> level = new();
+
+		bool dohl = false;
+		ClassJob? job = JobRow();
+		if (job is not null)
+			dohl = job.Role == 0;
+
+		foreach (var food in Data.Medicine) {
+			uint ilvl = food.ILvl;
+			if (ilvl < (dohl ? Data.FoodMinIlvlDoHL : Data.FoodMinIlvl))
+				continue;
+
+			bool match = false;
+			matches[food] = 0;
+
+			foreach (var stat in food.Stats) {
+				// Don't count vitality.
+				if (stat.Key == (int) Stat.VIT)
+					continue;
+
+				if (Attributes.ContainsKey(stat.Key)) {
+					matches[food]++;
+					match = true;
+				}
+			}
+
+			if (match)
+				RelevantMedicine.Add(food);
+		}
+
+		RelevantMedicine.Sort((a, b) => {
+			int value = a.ILvl.CompareTo(b.ILvl);
+			if (value != 0)
+				return -value;
+
+			matches.TryGetValue(a, out int aMatches);
+			matches.TryGetValue(b, out int bMatches);
+
+			value = aMatches.CompareTo(bMatches);
+			if (value != 0)
+				return -value;
+
+			return 0;
+		});
+	}
+
+	public void UpdateMedicine(Food? food, bool update = true) {
+		if (food == Medicine)
+			return;
+
+		Medicine = food;
+		if (update) {
+			CalculateBaseStats();
+			CalculateAdditional();
+		}
+	}
+
+	public void UpdateMedicine(uint foodId, bool update = true) {
+		Food? food = null;
+		foreach (var fd in Data.Medicine) {
+			if (fd.FoodID == foodId) {
+				food = fd;
+				break;
+			}
+		}
+
+		UpdateMedicine(food, update);
+	}
+
 	public void UpdateFood(Food? food, bool update = true) {
 		if (food == Food)
 			return;
@@ -339,6 +420,7 @@ internal class EquipmentSet {
 		CalculateBaseStats();
 		CalculateAdditional();
 		CalculateRelevantFood();
+		CalculateRelevantMedicine();
 	}
 
 	private void CalculateAdditional() {
@@ -354,8 +436,6 @@ internal class EquipmentSet {
 			));
 
 		if (Tribe != 0 && TribeRow() is Tribe tribe && RaceRow() is Race race) {
-
-
 			Calculated.Add(new CalculatedStat(
 				"calc.tribe",
 				"Race / Clan",
@@ -611,14 +691,25 @@ internal class EquipmentSet {
 
 		// Apply food.
 		foreach(var entry in Attributes) {
+			entry.Value.Food = 0;
 			if (Food is not null && Food.Stats.TryGetValue(entry.Key, out FoodStat? fstat)) {
 				if (fstat.Relative) {
 					entry.Value.Food = Math.Min(fstat.MaxValue, (int) Math.Floor(entry.Value.ValueNoFood * fstat.Multiplier));
 				} else
 					entry.Value.Food = fstat.MaxValue;
-			} else
-				entry.Value.Food = 0;
+			}
 		}
+
+		// Apply medicine.
+		if (Medicine is not null)
+			foreach(var stat in Medicine.Stats.Values) {
+				if (Attributes.TryGetValue(stat.StatID, out var value)) {
+					if (stat.Relative) {
+						value.Food += Math.Min(stat.MaxValue, (int) Math.Floor(value.ValueNoFood * stat.Multiplier));
+					} else
+						value.Food += stat.MaxValue;
+				}
+			}
 
 		// Finally, calculate tiers.
 		ParamGrow? growth = GrowRow();

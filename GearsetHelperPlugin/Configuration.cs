@@ -13,7 +13,7 @@ public class Configuration : IPluginConfiguration
 	public string? EtroRefreshKey { get; set; } = null;
 
 	public uint FoodMinIlvlDoHL { get; set; } = 200;
-	public uint FoodMinIlvl { get; set; } = 200;
+	public uint FoodMinIlvl { get; set; } = 500;
 
 	public bool CharacterAutoFood { get; set; } = true;
 

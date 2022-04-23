@@ -47,6 +47,7 @@ internal abstract class BaseWindow : IDisposable {
 
 	protected EquipmentSet? CachedSet;
 	protected Food? SelectedFood;
+	protected Food? SelectedMedicine;
 
 	private Task<Exporter.ExportResponse>? ExportTask;
 	private Exporter.ExportResponse? ExportResponse;
@@ -83,6 +84,7 @@ internal abstract class BaseWindow : IDisposable {
 
 		CachedSet = null;
 		SelectedFood = null;
+		SelectedMedicine = null;
 
 		if (ExportTask is not null)
 			ExportTask.Dispose();
@@ -93,6 +95,8 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	protected virtual void OnVisibleChange() { }
+
+	protected virtual Vector2? GetButtonPosition(float width, float height) { return null; }
 
 	#region Icons
 
@@ -203,6 +207,7 @@ internal abstract class BaseWindow : IDisposable {
 
 		UpdatePlayerData(result);
 		result.Food = SelectedFood;
+		result.Medicine = SelectedMedicine;
 
 		result.Recalculate();
 		return result;
@@ -239,6 +244,68 @@ internal abstract class BaseWindow : IDisposable {
 	#endregion
 
 	#region Drawing
+
+	protected bool DrawFoodCombo(string label, Food? selected, List<Food> choices, out Food? choice) {
+		bool result = false;
+		choice = null;
+
+		if (ImGui.BeginCombo(label, selected?.ItemRow()?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
+			bool none_selected = selected is null;
+			if (ImGui.Selectable(Localization.Localize("gui.food.none", "(None)"), none_selected)) {
+				choice = null;
+				result = true;
+			}
+			if (none_selected)
+				ImGui.SetItemDefaultFocus();
+
+			Vector2 size = new Vector2(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
+
+			foreach (Food food in choices) {
+				ExtendedItem? item = food.ItemRow();
+				if (item is null)
+					continue;
+
+				bool current = selected == food;
+				ImGui.PushID($"food#{food.ItemID}");
+				var oldPos = ImGui.GetCursorPos();
+
+				if (ImGui.Selectable("", current, ImGuiSelectableFlags.None, size)) {
+					result = true;
+					choice = food;
+				}
+				ImGui.PopID();
+				if (current)
+					ImGui.SetItemDefaultFocus();
+
+				var newPos = ImGui.GetCursorPos();
+				ImGui.SetCursorPos(oldPos);
+
+				var image = GetIcon(item.Icon, true);
+				if (image != null) {
+					ImGui.SetCursorPosX(oldPos.X);
+					ImGui.SetCursorPosY(oldPos.Y + (size.Y - image.Height) / 2);
+					ImGui.Image(image.ImGuiHandle, new Vector2(image.Width, image.Height));
+				}
+
+				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+				ImGui.SetCursorPosY(oldPos.Y);
+
+				ImGui.Text(item.Name);
+				ImGui.SameLine();
+				ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
+
+				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+				ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
+
+				ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine ?? string.Empty);
+
+				ImGui.SetCursorPos(newPos);
+			}
+			ImGui.EndCombo();
+		}
+
+		return result;
+	}
 
 	protected void DrawWindow(bool attach, int side, short x, short y, ushort width) {
 		UpdateEquipmentSet();
@@ -284,6 +351,8 @@ internal abstract class BaseWindow : IDisposable {
 		}
 
 		if (!visible) {
+			var size = ImGui.CalcTextSize(Ui.Plugin.Name);
+			pos = GetButtonPosition(size.X, size.Y) ?? pos;
 			ImGui.SetNextWindowPos(pos);
 			if (ImGui.Begin($"##{Ui.Plugin.Name}#{Name}", ButtonWindowFlags)) {
 
@@ -339,81 +408,53 @@ internal abstract class BaseWindow : IDisposable {
 					if (ImGui.Button("Etro"))
 						ExportTask = Ui.Plugin.Exporter.ExportEtro(CachedSet);
 				}
+
+				ImGui.SameLine();
+				if (ImGui.Button("Teamcraft (List)"))
+					ExportTask = Ui.Plugin.Exporter.ExportTeamcraft(CachedSet);
 			}
 
-			if (ImGui.BeginCombo("Food", SelectedFood?.ItemRow()?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
-				bool none_selected = SelectedFood is null;
-				if (ImGui.Selectable(Localization.Localize("gui.food.none", "(None)"), none_selected)) {
-					SelectedFood = null;
-					CachedSet.UpdateFood(null);
+			if (SelectedFood is not null || CachedSet.RelevantFood.Count > 0) {
+				if (DrawFoodCombo(
+					Localization.Localize("gui.food", "Food"),
+					SelectedFood,
+					CachedSet.RelevantFood,
+					out Food? choice
+				)) {
+					SelectedFood = choice;
+					CachedSet.UpdateFood(choice);
 				}
-				if (none_selected)
-					ImGui.SetItemDefaultFocus();
 
-				Vector2 size = new Vector2(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
+				ImGui.SameLine();
+				ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
+			}
 
-				foreach (Food food in CachedSet.RelevantFood) {
-					ExtendedItem? item = food.ItemRow();
-					if (item is null)
-						continue;
-
-					bool selected = SelectedFood == food;
-					ImGui.PushID($"food#{food.ItemID}");
-					var oldPos = ImGui.GetCursorPos();
-
-					if (ImGui.Selectable("", selected, ImGuiSelectableFlags.None, size)) {
-						SelectedFood = food;
-						CachedSet.UpdateFood(food);
-					}
-					ImGui.PopID();
-					if (selected)
-						ImGui.SetItemDefaultFocus();
-
-					var newPos = ImGui.GetCursorPos();
-					ImGui.SetCursorPos(oldPos);
-
-					var image = GetIcon(item.Icon, true);
-					if (image != null) {
-						ImGui.SetCursorPosX(oldPos.X);
-						ImGui.SetCursorPosY(oldPos.Y + (size.Y - image.Height) / 2);
-						ImGui.Image(image.ImGuiHandle, new Vector2(image.Width, image.Height));
-					}
-
-					ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
-					ImGui.SetCursorPosY(oldPos.Y);
-
-					ImGui.Text(item.Name);
-					ImGui.SameLine();
-					ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
-
-					ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
-					ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
-
-					ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine ?? string.Empty);
-
-					ImGui.SetCursorPos(newPos);
+			if (SelectedMedicine is not null || CachedSet.RelevantMedicine.Count > 0) {
+				if (DrawFoodCombo(
+					Localization.Localize("gui.medicine", "Medicine"),
+					SelectedMedicine,
+					CachedSet.RelevantMedicine,
+					out Food? choice
+				)) {
+					SelectedMedicine = choice;
+					CachedSet.UpdateMedicine(choice);
 				}
-				ImGui.EndCombo();
 			}
 
-			ImGui.SameLine();
-			ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
-
-
-			if (ImGui.CollapsingHeader("Attributes", ImGuiTreeNodeFlags.DefaultOpen)) {
-				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: CachedSet.Food is not null);
+			if (ImGui.CollapsingHeader(Localization.Localize("gui.attributes", "Attributes"), ImGuiTreeNodeFlags.DefaultOpen)) {
+				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: (CachedSet.Food is not null || CachedSet.Medicine is not null));
 			}
 
-			if (ImGui.CollapsingHeader("Calculated", ImGuiTreeNodeFlags.DefaultOpen)) {
+			if (ImGui.CollapsingHeader(Localization.Localize("gui.calculated", "Calculated"), ImGuiTreeNodeFlags.DefaultOpen)) {
 				DrawCalculatedTable(CachedSet.Calculated);
 			}
 
 			if (CachedSet.MateriaCount.Count > 0 || CachedSet.EmptyMeldSlots > 0) {
-				if (ImGui.CollapsingHeader("Melded Materia", ImGuiTreeNodeFlags.DefaultOpen)) {
+				if (ImGui.CollapsingHeader(Localization.Localize("gui.melded", "Melded Materia"), ImGuiTreeNodeFlags.DefaultOpen)) {
 					ImGui.BeginTable("MateriaTable", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable);
 
 					ImGui.TableSetupColumn(" #", ImGuiTableColumnFlags.WidthFixed, 32f);
-					ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+					ImGui.TableSetupColumn(Localization.Localize("gui.item", "Item"), ImGuiTableColumnFlags.WidthStretch);
 					ImGui.TableHeadersRow();
 
 					var sort = ImGui.TableGetSortSpecs();
@@ -467,14 +508,19 @@ internal abstract class BaseWindow : IDisposable {
 
 						if (icon != null) {
 							ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
+							if (ImGui.IsItemClicked())
+								Ui.Plugin.ChatGui.LinkItem(item, false);
 							ImGui.SameLine();
 							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						}
 
 						if (item == null)
 							ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.empty-slots", "(Empty Slots)"));
-						else
+						else {
 							ImGui.Text(item.Name);
+							if (ImGui.IsItemClicked())
+								Ui.Plugin.ChatGui.LinkItem(item, false);
+						}
 					}
 					ImGui.EndTable();
 				}
@@ -503,11 +549,16 @@ internal abstract class BaseWindow : IDisposable {
 						int height = Math.Min(icon.Height, (int) (32 * scale));
 
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
+						if (ImGui.IsItemClicked())
+							Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
+
 						ImGui.SameLine();
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 					}
 
 					ImGui.Text(item.Name);
+					if (ImGui.IsItemClicked())
+						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
 
 					if (stats is not null && stats.Count > 0)
 						DrawStatTable(stats.Values, CachedSet.Params, false, true);
@@ -523,8 +574,8 @@ internal abstract class BaseWindow : IDisposable {
 	internal static void DrawCalculatedTable(IEnumerable<CalculatedStat> calculated) {
 		ImGui.BeginTable("CalcTable", 2, ImGuiTableFlags.RowBg);
 
-		ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch, 1f);
-		ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.None, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.name", "Name"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.value", "Value"), ImGuiTableColumnFlags.None, 1f);
 
 		ImGui.TableHeadersRow();
 

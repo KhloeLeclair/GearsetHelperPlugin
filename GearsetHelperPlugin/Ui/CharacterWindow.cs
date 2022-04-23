@@ -15,6 +15,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using GearsetHelperPlugin.Models;
 
 using DStatus = Dalamud.Game.ClientState.Statuses.Status;
+using System.Numerics;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -33,6 +34,9 @@ internal class CharacterWindow : BaseWindow {
 	protected override void OnVisibleChange() {
 		Ui.Plugin.Config.CharacterOpen = Visible;
 		Ui.Plugin.Config.Save();
+
+		if (Visible && Ui.Plugin.Config.CharacterAutoFood && CachedSet is not null)
+			UpdateFoodData();
 	}
 
 	internal unsafe void Draw() {
@@ -43,6 +47,7 @@ internal class CharacterWindow : BaseWindow {
 
 		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
 		if (charAddon is null || ! charAddon->IsVisible) {
+			SelectedFood = null;
 			CachedSet = null;
 			return;
 		}
@@ -68,6 +73,26 @@ internal class CharacterWindow : BaseWindow {
 		return true;
 	}
 
+	protected void UpdateFoodData(EquipmentSet? set = null, PlayerCharacter? player = null, bool update = true) {
+		set ??= CachedSet;
+		if (set is null)
+			return;
+
+		player ??= GetActor();
+		if (player is null)
+			return;
+
+		var statuses = GetStatuses(player);
+		if (statuses is not null)
+			foreach (var status in statuses) {
+				if (status.StatusId == 48) {
+					set.UpdateFood((uint) status.StackCount, update);
+					SelectedFood = set.Food;
+					break;
+				}
+			}
+	}
+
 	protected override void UpdatePlayerData(EquipmentSet set) {
 
 		var player = GetActor();
@@ -83,20 +108,11 @@ internal class CharacterWindow : BaseWindow {
 		);
 
 		// Check our food, and maybe select it.
-		if (SelectedFood is null && Ui.Plugin.Config.CharacterAutoFood) {
-			var statuses = GetStatuses(player);
-			if (statuses is not null)
-				foreach (var status in statuses) {
-					if (status.StatusId == 48) {
-						set.UpdateFood((uint) status.StackCount, false);
-						SelectedFood = set.Food;
-						break;
-					}
-				}
-		}
+		if (SelectedFood is null && Ui.Plugin.Config.CharacterAutoFood)
+			UpdateFoodData(set, player, false);
 	}
 
-	private DStatus[]? GetStatuses(PlayerCharacter? player) {
+	private static DStatus[]? GetStatuses(PlayerCharacter? player) {
 		if (player is null)
 			return null;
 
