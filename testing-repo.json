@@ -1,0 +1,26 @@
+[
+	{
+		"Author": "Khloe Leclair",
+		"Name": "Gearset Helper Plugin",
+		"Description": "Displays extra information about a character's gearsets when Examine is open, and makes it easy to export gearsets to Etro or Ariyala.",
+		"InternalName": "GearsetHelperPlugin",
+		"AssemblyVersion": "1.1.0.0",
+		"TestingAssemblyVersion": "1.1.0.0",
+		"RepoUrl": "https://github.com/KhloeLeclair/GearsetHelperPlugin",
+		"ApplicableVersion": "any",
+		"DalamudApiLevel": 6,
+		"IsHide": "False",
+		"IsTestingExclusive": "True",
+		"DownloadCount": 0,
+		"LastUpdate": 0,
+		"LoadPriority": 0,
+		"DownloadLinkInstall": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.1.0.0/latest.zip",
+		"DownloadLinkTesting": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.1.0.0/latest.zip",
+		"DownloadLinkUpdate": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.1.0.0/latest.zip",
+		"IconUrl": "https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/icon.png",
+		"ImageUrls": [
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image1.png",
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image2.png"
+		],
+	}
+]
