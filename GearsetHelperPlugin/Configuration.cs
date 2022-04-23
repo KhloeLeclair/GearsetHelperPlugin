@@ -12,7 +12,13 @@ public class Configuration : IPluginConfiguration
 	public string? EtroApiKey { get; set; } = null;
 	public string? EtroRefreshKey { get; set; } = null;
 
-	public bool ShowItems { get; set; } = false;
+	public uint FoodMinIlvlDoHL { get; set; } = 200;
+	public uint FoodMinIlvl { get; set; } = 200;
+
+	public bool CharacterAutoFood { get; set; } = true;
+
+	public bool ExamineOpen { get; set; } = false;
+	public bool CharacterOpen { get; set; } = false;
 
 	public bool DisplayWithExamine { get; set; } = true;
 	public bool DisplayWithCharacter { get; set; } = true;

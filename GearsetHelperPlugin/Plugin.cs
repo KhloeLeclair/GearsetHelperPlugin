@@ -68,6 +68,8 @@ public class Plugin : IDalamudPlugin
 		Config = Interface!.GetPluginConfig() as Configuration ?? new Configuration();
 		Config.Initialize(Interface);
 
+		Data.FoodMinIlvl = Config.FoodMinIlvl;
+		Data.FoodMinIlvlDoHL = Config.FoodMinIlvlDoHL;
 		Data.LoadSheets(DataManager!.Excel);
 
 		Functions = new GameFunctions(this);

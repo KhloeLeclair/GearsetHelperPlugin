@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
+
+using GearsetHelperPlugin.Models;
 using GearsetHelperPlugin.Sheets;
 
 namespace GearsetHelperPlugin;
@@ -69,10 +71,12 @@ internal static class Data {
 	internal static ExcelSheet<Race>? RaceSheet { get; set; }
 	internal static ExcelSheet<Tribe>? TribeSheet { get; set; }
 	internal static ExcelSheet<ClassJob>? ClassSheet { get; set; }
+	internal static ExcelSheet<ItemAction>? ItemActionSheet { get; set; }
+	internal static ExcelSheet<ItemFood>? FoodSheet { get; set; }
 
-	[MemberNotNullWhen(true, nameof(ItemSheet), nameof(ParamSheet), nameof(GrowSheet), nameof(LevelSheet), nameof(MateriaSheet), nameof(RaceSheet), nameof(TribeSheet), nameof(ClassSheet))]
+	[MemberNotNullWhen(true, nameof(ItemSheet), nameof(ItemActionSheet), nameof(FoodSheet), nameof(ParamSheet), nameof(GrowSheet), nameof(LevelSheet), nameof(MateriaSheet), nameof(RaceSheet), nameof(TribeSheet), nameof(ClassSheet))]
 	internal static bool CheckSheets(ExcelModule? excel = null) {
-		if (ItemSheet == null || ParamSheet == null || GrowSheet == null || LevelSheet == null || MateriaSheet == null || RaceSheet == null || TribeSheet == null || ClassSheet == null) {
+		if (ItemSheet == null || ItemActionSheet == null || FoodSheet == null || ParamSheet == null || GrowSheet == null || LevelSheet == null || MateriaSheet == null || RaceSheet == null || TribeSheet == null || ClassSheet == null) {
 			if (excel is not null) {
 				LoadSheets(excel);
 				return CheckSheets(null);
@@ -86,6 +90,8 @@ internal static class Data {
 
 	internal static void LoadSheets(ExcelModule excel) {
 		ItemSheet = excel.GetSheet<ExtendedItem>();
+		ItemActionSheet = excel.GetSheet<ItemAction>();
+		FoodSheet = excel.GetSheet<ItemFood>();
 		ParamSheet = excel.GetSheet<ExtendedBaseParam>();
 		GrowSheet = excel.GetSheet<ParamGrow>();
 		LevelSheet = excel.GetSheet<ExtendedItemLevel>();
@@ -93,6 +99,69 @@ internal static class Data {
 		TribeSheet = excel.GetSheet<Tribe>();
 		RaceSheet = excel.GetSheet<Race>();
 		ClassSheet = excel.GetSheet<ClassJob>();
+
+		_Food = null;
+	}
+
+	#endregion
+
+	#region Food
+
+	private static uint _FoodMinIlvlDoHL = 0;
+	internal static uint FoodMinIlvlDoHL {
+		get => _FoodMinIlvlDoHL;
+		set {
+			if (_FoodMinIlvlDoHL != value) {
+				_FoodMinIlvlDoHL = value;
+				_Food = null;
+			}
+		}
+	}
+
+	private static uint _FoodMinIlvl = 0;
+	internal static uint FoodMinIlvl {
+		get => _FoodMinIlvl;
+		set {
+			if (_FoodMinIlvl != value) {
+				_FoodMinIlvl = value;
+				_Food = null;
+			}
+		}
+	}
+
+	private static List<Food>? _Food;
+
+	internal static List<Food> Food {
+		get {
+			if (_Food is null)
+				LoadFood();
+
+			return _Food;
+		}
+	}
+
+	[MemberNotNull(nameof(_Food))]
+	private static void LoadFood() {
+		_Food = new List<Food>();
+
+		if (!CheckSheets())
+			return;
+
+		foreach(ExtendedItem item in ItemSheet) {
+			/*uint ilvl = item.LevelItem.Row;
+			if (ilvl < _FoodMinIlvl && ilvl < _FoodMinIlvlDoHL)
+				continue;*/
+
+			ItemAction? action = item.ItemAction.Value;
+			if (action is not null && action.DataHQ[0] == 48) {
+				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
+				if (food is not null) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
+					fdata.UpdateStats(food);
+					_Food.Add(fdata);
+				}
+			}
+		}
 	}
 
 	#endregion

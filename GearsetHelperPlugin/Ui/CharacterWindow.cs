@@ -2,6 +2,10 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 
+using Dalamud;
+using Dalamud.Logging;
+
+using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Enums;
 
@@ -10,18 +14,25 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using GearsetHelperPlugin.Models;
 
+using DStatus = Dalamud.Game.ClientState.Statuses.Status;
+
 namespace GearsetHelperPlugin.Ui;
 
 internal class CharacterWindow : BaseWindow {
 
-	protected override string Name => "Character";
+	protected override string Name => Localization.Localize("gui.character", "Character");
 
 	internal CharacterWindow(PluginUI ui) : base(ui) {
-
+		Visible = Ui.Plugin.Config.CharacterOpen;
 	}
 
 	public override void Dispose(bool disposing) {
 		
+	}
+
+	protected override void OnVisibleChange() {
+		Ui.Plugin.Config.CharacterOpen = Visible;
+		Ui.Plugin.Config.Save();
 	}
 
 	internal unsafe void Draw() {
@@ -70,55 +81,50 @@ internal class CharacterWindow : BaseWindow {
 			tribe: player.Customize[(int) CustomizeIndex.Tribe],
 			level: player.Level
 		);
+
+		// Check our food, and maybe select it.
+		if (SelectedFood is null && Ui.Plugin.Config.CharacterAutoFood) {
+			var statuses = GetStatuses(player);
+			if (statuses is not null)
+				foreach (var status in statuses) {
+					if (status.StatusId == 48) {
+						set.UpdateFood((uint) status.StackCount, false);
+						SelectedFood = set.Food;
+						break;
+					}
+				}
+		}
+	}
+
+	private DStatus[]? GetStatuses(PlayerCharacter? player) {
+		if (player is null)
+			return null;
+
+		var list = player.StatusList;
+		if (list is null)
+			return null;
+
+		int count = 0;
+		for (int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				count++;
+		}
+
+		DStatus[] result = new DStatus[count];
+		int j = 0;
+		for(int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				result[j++] = status;
+		}
+
+		return result;
 	}
 
 	private unsafe PlayerCharacter? GetActor() {
-		// TODO: Rewrite this entire method, and probably factor it out.
-
+		// The local player is easy to deal with.
 		return Ui.Plugin.ClientState.LocalPlayer;
-
-		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
-		if (charAddon == null || !charAddon->IsVisible)
-			return null;
-
-		Lazy<Dictionary<string, PlayerCharacter>> players = new(() => {
-			var rawPlayers = Ui.Plugin.ObjectTable
-			.Where(obj => obj is PlayerCharacter && obj.IsValid())
-			.Cast<PlayerCharacter>();
-
-			var result = new Dictionary<string, PlayerCharacter>();
-
-			foreach (var entry in rawPlayers) {
-				string name = entry.Name.TextValue;
-				if (!result.ContainsKey(name))
-					result[name] = entry;
-			}
-
-			return result;
-		});
-
-		var nodeList = charAddon->UldManager.NodeList;
-		ushort count = charAddon->UldManager.NodeListCount;
-
-		for (ushort i = 0; i < count; i++) {
-			var obj = nodeList[i];
-			if (obj == null)
-				continue;
-
-			if (!obj->IsVisible || obj->Type != NodeType.Text)
-				continue;
-
-			var txt = obj->GetAsAtkTextNode();
-			if (txt == null)
-				continue;
-
-			string? result = txt->NodeText.ToString();
-
-			if (!string.IsNullOrEmpty(result) && players.Value.TryGetValue(result, out PlayerCharacter? player))
-				return player;
-		}
-
-		return null;
 	}
 
 }

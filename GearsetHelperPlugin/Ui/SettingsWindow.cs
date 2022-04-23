@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Threading.Tasks;
 
+using Dalamud;
 using Dalamud.Interface.Colors;
 
 using ImGuiNET;
@@ -49,6 +50,21 @@ internal class SettingsWindow {
 		ImGui.SetNextWindowSizeConstraints(new Vector2(370 * scale, 100), new Vector2(370 * scale, float.MaxValue));
 
 		if (ImGui.Begin($"{Ui.Plugin.Name} Settings", ref visible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.AlwaysAutoResize)) {
+
+			int ilvl = (int) Config.FoodMinIlvl;
+			if (ImGui.DragInt(Localization.Localize("gui.settings.food-ilvl", "Food Min Ilvl"), ref ilvl, 10, 0, 610)) {
+				Config.FoodMinIlvl = (uint) ilvl;
+				Data.FoodMinIlvl = Config.FoodMinIlvl;
+				Config.Save();
+			}
+
+			int ilvl_dohl = (int) Config.FoodMinIlvlDoHL;
+			if (ImGui.DragInt(Localization.Localize("gui.settings.food-ilvl-dohl", "Food Min Ilvl (DoH/L)"), ref ilvl_dohl, 10, 0, 610)) {
+				Config.FoodMinIlvlDoHL = (uint) ilvl_dohl;
+				Data.FoodMinIlvlDoHL = Config.FoodMinIlvlDoHL;
+				Config.Save();
+			}
+
 			ImGui.TextColored(ImGuiColors.DalamudGrey, "Examine Window");
 
 			ImGui.Indent();

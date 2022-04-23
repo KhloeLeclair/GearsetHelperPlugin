@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 
+using Dalamud;
+
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Enums;
 
@@ -16,10 +18,12 @@ internal class ExamineWindow : BaseWindow {
 
 	private uint examineLoadStage = 4;
 
-	protected override string Name => "Examine";
+	protected override string Name => Localization.Localize("gui.examine", "Examine");
 
 	internal ExamineWindow(PluginUI ui) : base(ui) {
 		Ui.Plugin.Functions.ExamineOnRefresh += ExamineRefreshed;
+
+		Visible = Ui.Plugin.Config.ExamineOpen;
 	}
 
 	public override void Dispose(bool disposing) {
@@ -30,6 +34,11 @@ internal class ExamineWindow : BaseWindow {
 		// Just save the load state so our draw call knows if data is loaded or not.
 		if (loadStage == 1 || loadStage > examineLoadStage)
 			examineLoadStage = loadStage;
+	}
+
+	protected override void OnVisibleChange() {
+		Ui.Plugin.Config.ExamineOpen = Visible;
+		Ui.Plugin.Config.Save();
 	}
 
 	internal unsafe void Draw() {

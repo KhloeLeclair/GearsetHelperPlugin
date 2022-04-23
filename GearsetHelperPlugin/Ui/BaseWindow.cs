@@ -9,6 +9,7 @@ using Dalamud;
 
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Components;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
 
@@ -24,7 +25,7 @@ namespace GearsetHelperPlugin.Ui;
 
 internal abstract class BaseWindow : IDisposable {
 
-	internal const ImGuiWindowFlags ButtonWindowFlags = ImGuiWindowFlags.NoBackground
+	internal const ImGuiWindowFlags ButtonWindowFlags = ImGuiWindowFlags.None //ImGuiWindowFlags.NoBackground
 		| ImGuiWindowFlags.NoDecoration
 		| ImGuiWindowFlags.NoCollapse
 		| ImGuiWindowFlags.NoTitleBar
@@ -42,18 +43,25 @@ internal abstract class BaseWindow : IDisposable {
 	protected abstract string Name { get; }
 
 	private readonly Dictionary<uint, TextureWrap?> ItemIcons = new();
+	private readonly Dictionary<uint, TextureWrap?> ItemIconsHQ = new();
 
 	protected EquipmentSet? CachedSet;
+	protected Food? SelectedFood;
 
 	private Task<Exporter.ExportResponse>? ExportTask;
 	private Exporter.ExportResponse? ExportResponse;
 
 	private bool visible = false;
+	private bool oldVisible = false;
 
 	protected bool Visible {
 		get => visible;
 		set {
-			visible = value;
+			if (visible != value) {
+				visible = value;
+				oldVisible = visible;
+				OnVisibleChange();
+			}
 		}
 	}
 
@@ -67,8 +75,14 @@ internal abstract class BaseWindow : IDisposable {
 		foreach (var entry in ItemIcons)
 			entry.Value?.Dispose();
 
+		foreach (var entry in ItemIconsHQ)
+			entry.Value?.Dispose();
+
 		ItemIcons.Clear();
+		ItemIconsHQ.Clear();
+
 		CachedSet = null;
+		SelectedFood = null;
 
 		if (ExportTask is not null)
 			ExportTask.Dispose();
@@ -78,21 +92,33 @@ internal abstract class BaseWindow : IDisposable {
 
 	}
 
+	protected virtual void OnVisibleChange() { }
+
 	#region Icons
 
-	protected TextureWrap? GetIcon(Item? item) {
+	protected TextureWrap? GetIcon(Item? item, bool hq = false) {
 		if (item is not null)
-			return GetIcon(item.Icon);
+			return GetIcon(item.Icon, hq);
 		return null;
 	}
 
-	protected TextureWrap? GetIcon(uint id) {
-		if (ItemIcons.TryGetValue(id, out var icon))
+	protected TextureWrap? GetIcon(uint id, bool hq = false) {
+		if (hq) {
+			if (ItemIcons.TryGetValue(id, out var icon))
+				return icon;
+
+			icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
+			ItemIconsHQ[id] = icon;
 			return icon;
 
-		icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
-		ItemIcons[id] = icon;
-		return icon;
+		} else {
+			if (ItemIcons.TryGetValue(id, out var icon))
+				return icon;
+
+			icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
+			ItemIcons[id] = icon;
+			return icon;
+		}
 	}
 
 	#endregion
@@ -176,6 +202,7 @@ internal abstract class BaseWindow : IDisposable {
 		result.Level = 90;
 
 		UpdatePlayerData(result);
+		result.Food = SelectedFood;
 
 		result.Recalculate();
 		return result;
@@ -314,8 +341,67 @@ internal abstract class BaseWindow : IDisposable {
 				}
 			}
 
+			if (ImGui.BeginCombo("Food", SelectedFood?.ItemRow()?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
+				bool none_selected = SelectedFood is null;
+				if (ImGui.Selectable(Localization.Localize("gui.food.none", "(None)"), none_selected)) {
+					SelectedFood = null;
+					CachedSet.UpdateFood(null);
+				}
+				if (none_selected)
+					ImGui.SetItemDefaultFocus();
+
+				Vector2 size = new Vector2(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
+
+				foreach (Food food in CachedSet.RelevantFood) {
+					ExtendedItem? item = food.ItemRow();
+					if (item is null)
+						continue;
+
+					bool selected = SelectedFood == food;
+					ImGui.PushID($"food#{food.ItemID}");
+					var oldPos = ImGui.GetCursorPos();
+
+					if (ImGui.Selectable("", selected, ImGuiSelectableFlags.None, size)) {
+						SelectedFood = food;
+						CachedSet.UpdateFood(food);
+					}
+					ImGui.PopID();
+					if (selected)
+						ImGui.SetItemDefaultFocus();
+
+					var newPos = ImGui.GetCursorPos();
+					ImGui.SetCursorPos(oldPos);
+
+					var image = GetIcon(item.Icon, true);
+					if (image != null) {
+						ImGui.SetCursorPosX(oldPos.X);
+						ImGui.SetCursorPosY(oldPos.Y + (size.Y - image.Height) / 2);
+						ImGui.Image(image.ImGuiHandle, new Vector2(image.Width, image.Height));
+					}
+
+					ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+					ImGui.SetCursorPosY(oldPos.Y);
+
+					ImGui.Text(item.Name);
+					ImGui.SameLine();
+					ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
+
+					ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+					ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
+
+					ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine ?? string.Empty);
+
+					ImGui.SetCursorPos(newPos);
+				}
+				ImGui.EndCombo();
+			}
+
+			ImGui.SameLine();
+			ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
+
+
 			if (ImGui.CollapsingHeader("Attributes", ImGuiTreeNodeFlags.DefaultOpen)) {
-				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true);
+				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: CachedSet.Food is not null);
 			}
 
 			if (ImGui.CollapsingHeader("Calculated", ImGuiTreeNodeFlags.DefaultOpen)) {
@@ -386,7 +472,7 @@ internal abstract class BaseWindow : IDisposable {
 						}
 
 						if (item == null)
-							ImGui.TextColored(ImGuiColors.ParsedGrey, "(Empty Slots)");
+							ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.empty-slots", "(Empty Slots)"));
 						else
 							ImGui.Text(item.Name);
 					}
@@ -394,7 +480,7 @@ internal abstract class BaseWindow : IDisposable {
 				}
 			}
 
-			if (Ui.Plugin.Config.ShowItems && ImGui.CollapsingHeader("Items")) {
+			if (ImGui.CollapsingHeader(Localization.Localize("gui.items", "Items"))) {
 				bool first = true;
 
 				for (int i = 0; i < CachedSet.Items.Count; i++) {
@@ -412,7 +498,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.Spacing();
 					}
 
-					TextureWrap? icon = GetIcon(item);
+					TextureWrap? icon = GetIcon(item, rawItem.HighQuality);
 					if (icon != null) {
 						int height = Math.Min(icon.Height, (int) (32 * scale));
 
@@ -429,6 +515,9 @@ internal abstract class BaseWindow : IDisposable {
 			}
 		}
 		ImGui.End();
+
+		if (visible != oldVisible)
+			OnVisibleChange();
 	}
 
 	internal static void DrawCalculatedTable(IEnumerable<CalculatedStat> calculated) {
@@ -452,11 +541,13 @@ internal abstract class BaseWindow : IDisposable {
 		ImGui.EndTable();
 	}
 
-	internal static void DrawStatTable(IEnumerable<StatData> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false, bool includeTiers = false) {
+	internal static void DrawStatTable(IEnumerable<StatData> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false, bool includeTiers = false, bool includeFood = false) {
 		int cols = 8;
 		if (includeBase)
 			cols += 2;
 		if (includeRemaining)
+			cols += 2;
+		if (includeFood)
 			cols += 2;
 		if (includeTiers)
 			cols += 3;
@@ -474,6 +565,12 @@ internal abstract class BaseWindow : IDisposable {
 		ImGui.TableSetupColumn("Meld", ImGuiTableColumnFlags.None, 1f);
 		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
 		ImGui.TableSetupColumn("Over", ImGuiTableColumnFlags.None, 1f);
+
+		if (includeFood) {
+			ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+			ImGui.TableSetupColumn("Food", ImGuiTableColumnFlags.None, 1f);
+		}
+
 		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
 		ImGui.TableSetupColumn("Total", ImGuiTableColumnFlags.None, 1f);
 
@@ -554,6 +651,20 @@ internal abstract class BaseWindow : IDisposable {
 
 			if (ImGui.IsItemHovered())
 				ImGui.SetTooltip(Localization.Localize("attr.waste", "The wasted attribute points from materia melded past an item's limits."));
+
+			if (includeFood) {
+				ImGui.TableNextColumn();
+				ImGui.TextColored(ImGuiColors.DalamudGrey3, "+");
+
+				ImGui.TableNextColumn();
+				if (stat.Food > 0)
+					ImGui.TextColored(ImGuiColors.ParsedGreen, stat.Food.ToString());
+				else
+					ImGui.TextColored(ImGuiColors.DalamudGrey, stat.Food.ToString());
+
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("attr.food", "The attribute points gained from food."));
+			}
 
 			ImGui.TableNextColumn();
 			ImGui.TextColored(ImGuiColors.DalamudGrey3, "=");

@@ -44,6 +44,11 @@ internal class EquipmentSet {
 	#region Gear Data
 
 	/// <summary>
+	/// Food to apply to the stats.
+	/// </summary>
+	public Food? Food { get; set; }
+
+	/// <summary>
 	/// Whether or not this equipment set includes a soul crystal.
 	/// </summary>
 	public bool HasCrystal { get; set; }
@@ -76,6 +81,12 @@ internal class EquipmentSet {
 	#region Calculated Stats
 
 	public List<CalculatedStat> Calculated { get; } = new();
+
+	#endregion
+
+	#region Relevant Foods
+
+	public List<Food> RelevantFood { get; } = new();
 
 	#endregion
 
@@ -241,6 +252,79 @@ internal class EquipmentSet {
 		return OldHasOffhand != HasOffhand || OldHasCrystal != HasCrystal || OldClass != Class || OldEffectiveClass != EffectiveClass;
 	}
 
+	public void CalculateRelevantFood() {
+		RelevantFood.Clear();
+
+		Dictionary<Food, int> matches = new();
+		Dictionary<Food, int> level = new();
+
+		bool dohl = false;
+		ClassJob? job = JobRow();
+		if (job is not null)
+			dohl = job.Role == 0;
+
+		foreach (var food in Data.Food) {
+			uint ilvl = food.ILvl;
+			if (ilvl < (dohl ? Data.FoodMinIlvlDoHL : Data.FoodMinIlvl))
+				continue;
+
+			bool match = false;
+			matches[food] = 0;
+
+			foreach (var stat in food.Stats) {
+				// Don't count vitality.
+				if (stat.Key == (int) Stat.VIT)
+					continue;
+
+				if (Attributes.ContainsKey(stat.Key)) {
+					matches[food]++;
+					match = true;
+				}
+			}
+
+			if (match)
+				RelevantFood.Add(food);
+		}
+
+		RelevantFood.Sort((a, b) => {
+			int value = a.ILvl.CompareTo(b.ILvl);
+			if (value != 0)
+				return -value;
+
+			matches.TryGetValue(a, out int aMatches);
+			matches.TryGetValue(b, out int bMatches);
+
+			value = aMatches.CompareTo(bMatches);
+			if (value != 0)
+				return -value;
+
+			return 0;
+		});
+	}
+
+	public void UpdateFood(Food? food, bool update = true) {
+		if (food == Food)
+			return;
+
+		Food = food;
+		if (update) {
+			CalculateBaseStats();
+			CalculateAdditional();
+		}
+	}
+
+	public void UpdateFood(uint foodId, bool update = true) {
+		Food? food = null;
+		foreach(var fd in Data.Food) {
+			if (fd.FoodID == foodId) {
+				food = fd;
+				break;
+			}
+		}
+
+		UpdateFood(food, update);
+	}
+
 	#endregion
 
 	#region Stat Calculation
@@ -254,6 +338,7 @@ internal class EquipmentSet {
 		CalculateItemStats();
 		CalculateBaseStats();
 		CalculateAdditional();
+		CalculateRelevantFood();
 	}
 
 	private void CalculateAdditional() {
@@ -522,6 +607,17 @@ internal class EquipmentSet {
 			ModifyBaseStat(Stat.INT, extra: tribe.INT);
 			ModifyBaseStat(Stat.MND, extra: tribe.MND);
 			ModifyBaseStat(Stat.PIE, extra: tribe.PIE);
+		}
+
+		// Apply food.
+		foreach(var entry in Attributes) {
+			if (Food is not null && Food.Stats.TryGetValue(entry.Key, out FoodStat? fstat)) {
+				if (fstat.Relative) {
+					entry.Value.Food = Math.Min(fstat.MaxValue, (int) Math.Floor(entry.Value.ValueNoFood * fstat.Multiplier));
+				} else
+					entry.Value.Food = fstat.MaxValue;
+			} else
+				entry.Value.Food = 0;
 		}
 
 		// Finally, calculate tiers.

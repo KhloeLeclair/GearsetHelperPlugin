@@ -287,6 +287,9 @@ internal class Exporter : IDisposable {
 			if (gearset.Tribe != 0)
 				obj.Add("clan", gearset.Tribe);
 
+			if (gearset.Food is not null)
+				obj.Add("food", gearset.Food.FoodID);
+
 			PluginLog.Information($"Result:\n{obj.ToString(Formatting.None)}");
 
 			var content = new StringContent(obj.ToString(Formatting.None), Encoding.UTF8, "application/json");
