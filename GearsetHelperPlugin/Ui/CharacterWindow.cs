@@ -1,11 +1,5 @@
-using System;
-using System.Linq;
-using System.Collections.Generic;
-
 using Dalamud;
-using Dalamud.Logging;
 
-using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Enums;
 
@@ -15,7 +9,6 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using GearsetHelperPlugin.Models;
 
 using DStatus = Dalamud.Game.ClientState.Statuses.Status;
-using System.Numerics;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -48,6 +41,7 @@ internal class CharacterWindow : BaseWindow {
 		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
 		if (charAddon is null || ! charAddon->IsVisible) {
 			SelectedFood = null;
+			SelectedMedicine = null;
 			CachedSet = null;
 			return;
 		}

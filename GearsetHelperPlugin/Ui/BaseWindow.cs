@@ -258,7 +258,7 @@ internal abstract class BaseWindow : IDisposable {
 			if (none_selected)
 				ImGui.SetItemDefaultFocus();
 
-			Vector2 size = new Vector2(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
+			Vector2 size = new(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
 
 			foreach (Food food in choices) {
 				ExtendedItem? item = food.ItemRow();

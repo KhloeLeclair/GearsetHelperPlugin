@@ -81,8 +81,8 @@ internal class Exporter : IDisposable {
 
 	#region Teamcraft Export
 
-	private async Task<ExportResponse> Task_ExportTeamcraft(EquipmentSet gearset) {
-		var result = new ExportResponse();
+	private ExportResponse Task_ExportTeamcraft(EquipmentSet gearset) {
+		ExportResponse result = new();
 
 		try {
 
@@ -231,7 +231,7 @@ internal class Exporter : IDisposable {
 	}
 
 	private async Task<ExportResponse> Task_ExportEtro(EquipmentSet gearset) {
-		ExportResponse result = new ExportResponse();
+		ExportResponse result = new();
 
 		try {
 			if (!CanExportEtro) {
@@ -499,7 +499,7 @@ internal class Exporter : IDisposable {
 	#endregion
 
 	private async Task<ExportResponse> Task_ExportAriyala(EquipmentSet gearset) {
-		ExportResponse result = new ExportResponse();
+		ExportResponse result = new();
 
 		try {
 			PluginLog.LogInformation("Exporting gearset to Ariyala.");

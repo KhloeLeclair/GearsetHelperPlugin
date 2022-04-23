@@ -44,12 +44,16 @@ internal class ExamineWindow : BaseWindow {
 	internal unsafe void Draw() {
 		if (!Ui.Plugin.Config.DisplayWithExamine) {
 			CachedSet = null;
+			SelectedFood = null;
+			SelectedMedicine = null;
 			return;
 		}
 
 		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
 		if (examineAddon == null || !examineAddon->IsVisible) {
 			CachedSet = null;
+			SelectedFood = null;
+			SelectedMedicine = null;
 			return;
 		}
 
