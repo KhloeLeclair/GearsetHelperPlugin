@@ -1,13 +1,9 @@
-using System;
 using System.Numerics;
 using System.Threading.Tasks;
 
-using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 
 using ImGuiNET;
-
-using GearsetHelperPlugin;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -53,21 +49,59 @@ internal class SettingsWindow {
 		ImGui.SetNextWindowSizeConstraints(new Vector2(370 * scale, 100), new Vector2(370 * scale, float.MaxValue));
 
 		if (ImGui.Begin($"{Ui.Plugin.Name} Settings", ref visible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.AlwaysAutoResize)) {
-			ImGui.TextColored(ImGuiColors.DalamudGrey, "Position");
+			ImGui.TextColored(ImGuiColors.DalamudGrey, "Examine Window");
+
+			ImGui.Indent();
+
+			bool display = Config.DisplayWithExamine;
+			if (ImGui.Checkbox("Enable", ref display)) {
+				Config.DisplayWithExamine = display;
+				Config.Save();
+			}
 
 			bool attach = Config.AttachToExamine;
-			if (ImGui.Checkbox("Attach to Examine", ref attach)) {
+			if (ImGui.Checkbox("Attach", ref attach)) {
 				Config.AttachToExamine = attach;
 				Config.Save();
 			}
 
-			ImGui.Indent();
-
-			int side = Config.AttachSide;
+			int side = Config.AttachSideExamine;
 			if (ImGui.Combo("Side", ref side, "Left\x00Right")) {
-				Config.AttachSide = side;
+				Config.AttachSideExamine = side;
 				Config.Save();
 			}
+
+			ImGui.Unindent();
+
+			ImGui.Spacing();
+
+			ImGui.TextColored(ImGuiColors.DalamudGrey, "Character Window");
+
+			ImGui.Indent();
+
+			bool cdisplay = Config.DisplayWithCharacter;
+			ImGui.PushID("character:enable");
+			if (ImGui.Checkbox("Enable", ref cdisplay)) {
+				Config.DisplayWithCharacter = cdisplay;
+				Config.Save();
+			}
+			ImGui.PopID();
+
+			bool cattach = Config.AttachToCharacter;
+			ImGui.PushID("character:attach");
+			if (ImGui.Checkbox("Attach", ref cattach)) {
+				Config.AttachToCharacter = cattach;
+				Config.Save();
+			}
+			ImGui.PopID();
+
+			int cside = Config.AttachSideCharacter;
+			ImGui.PushID("character:side");
+			if (ImGui.Combo("Side", ref cside, "Left\x00Right")) {
+				Config.AttachSideCharacter = cside;
+				Config.Save();
+			}
+			ImGui.PopID();
 
 			ImGui.Unindent();
 
@@ -85,7 +119,6 @@ internal class SettingsWindow {
 						Config.EtroApiKey = string.IsNullOrEmpty(token) ? null : token;
 						Config.EtroRefreshKey = null;
 						Config.Save();
-						Ui.Plugin.Exporter.ClearError();
 					}
 
 					bool login = false;
@@ -106,7 +139,6 @@ internal class SettingsWindow {
 						Config.EtroApiKey = null;
 						Config.EtroRefreshKey = null;
 						Config.Save();
-						Ui.Plugin.Exporter.ClearError();
 					}
 				}
 
@@ -116,7 +148,6 @@ internal class SettingsWindow {
 						Config.EtroApiKey = LoginTask.Result.ApiKey;
 						Config.EtroRefreshKey = LoginTask.Result.RefreshKey;
 						Config.Save();
-						Ui.Plugin.Exporter.ClearError();
 
 						username = string.Empty;
 						password = string.Empty;

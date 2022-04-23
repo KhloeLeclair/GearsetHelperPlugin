@@ -1,7 +1,10 @@
 using System;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,10 +13,9 @@ using Newtonsoft.Json.Linq;
 
 using Dalamud.Logging;
 
-using System.Net.Http;
-using System.Net.Http.Headers;
-
 using Lumina.Excel.GeneratedSheets;
+
+using GearsetHelperPlugin.Models;
 using GearsetHelperPlugin.Sheets;
 
 namespace GearsetHelperPlugin;
@@ -22,10 +24,6 @@ internal class Exporter : IDisposable {
 
 	private readonly Plugin Plugin;
 	private readonly HttpClient Client;
-
-	public bool Exporting { get; private set; } = false;
-
-	public string? Error { get; private set; } = null;
 
 	internal Exporter(Plugin plugin) {
 		Plugin = plugin;
@@ -38,11 +36,6 @@ internal class Exporter : IDisposable {
 		Client.Dispose();
 	}
 
-	public void ClearError() {
-		if (!Exporting)
-			Error = null;
-	}
-
 	public bool CanExportEtro {
 		get {
 			if (!string.IsNullOrEmpty(Plugin.Config.EtroApiKey))
@@ -52,26 +45,19 @@ internal class Exporter : IDisposable {
 		}
 	}
 
-	public void ExportEtro(Gearset gearset) {
-		if (Exporting || !CanExportEtro)
-			return;
-
-		Task.Run(() => Task_ExportEtro(gearset));
+	public Task<ExportResponse> ExportEtro(EquipmentSet gearset) {
+		return Task.Run(() => Task_ExportEtro(gearset));
 	}
 
 	public Task<EtroLoginResponse> LoginEtro(string username, string password) {
 		return Task.Run(() => Task_EtroLogin(username, password));
 	}
 
-	public void ExportAriyala(Gearset gearset) {
-		if (Exporting)
-			return;
-
-		Task.Run(() => Task_ExportAriyala(gearset));
-
+	public Task<ExportResponse> ExportAriyala(EquipmentSet gearset) {
+		return Task.Run(() => Task_ExportAriyala(gearset));
 	}
 
-	private static void TryOpenURL(string url) {
+	internal static void TryOpenURL(string url) {
 		try {
 			ProcessStartInfo ps = new(url) {
 				UseShellExecute = true,
@@ -81,6 +67,11 @@ internal class Exporter : IDisposable {
 		} catch {
 			/* Do nothing~ */
 		}
+	}
+
+	internal class ExportResponse {
+		public string? Url { get; set; }
+		public string? Error { get; set; }
 	}
 
 	#region Etro Export
@@ -191,39 +182,39 @@ internal class Exporter : IDisposable {
 		return result;
 	}
 
-	private async Task Task_ExportEtro(Gearset gearset) {
-		Exporting = true;
-		Error = null;
+	private async Task<ExportResponse> Task_ExportEtro(EquipmentSet gearset) {
+		ExportResponse result = new ExportResponse();
 
 		try {
-			PluginLog.LogInformation("Exporting gearset to Etro.");
-
-			var ItemSheet = Plugin.DataManager.GetExcelSheet<ExtendedItem>();
-			var MateriaSheet = Plugin.DataManager.GetExcelSheet<Materia>();
-			var ClassSheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-
-			if (ItemSheet == null || MateriaSheet == null || ClassSheet == null) {
-				Error = "Unable to load data.";
-				Exporting = false;
-				return;
+			if (!CanExportEtro) {
+				result.Error = "Unable to export to Etro. Not authenticated.";
+				return result;
 			}
 
-			var jobData = gearset.Class == 0 ? null : ClassSheet.GetRow(gearset.Class);
-			if (jobData == null) { 
-				Error = "Unable to detect class.";
-				Exporting = false;
-				return;
+			PluginLog.LogInformation("Exporting gearset to Etro.");
+
+			ClassJob? jobData = gearset.JobRow();
+			if (jobData == null) {
+				result.Error = "Unable to detect class.";
+				return result;
 			}
 
 			uint minIlvl = 999;
 			uint maxIlvl = 1;
 
-			string jobName = jobData.Name ?? "Job";
+			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name) ?? "Job";
 			int job = (int) jobData.RowId;
+
+			string name = $"i{gearset.ItemLevel} {jobName}";
+			if (!string.IsNullOrEmpty(gearset.PlayerName))
+				name = $"{name} ({gearset.PlayerName})";
+
+			if (name.Length > 30)
+				name = name[..30];
 
 			var materiaMap = new JObject();
 			var obj = new JObject() {
-				["name"] = string.IsNullOrEmpty(gearset.PlayerName) ? $"Exported {jobName} Gearset" : $"{gearset.PlayerName}'s {jobName} Gear",
+				["name"] = name,
 				["materia"] = materiaMap,
 				["job"] = job
 			};
@@ -231,13 +222,13 @@ internal class Exporter : IDisposable {
 			bool had_right = false;
 
 			foreach (var item in gearset.Items) {
-				var data = item.GetItem(ItemSheet);
+				var data = item.Row();
 				if (data == null)
 					continue;
 
 				uint slot = data.EquipSlotCategory.Row;
 				string? mappedSlot;
-				string materiaSlot = item.ItemID.ToString();
+				string materiaSlot = item.ID.ToString();
 
 				if (slot == 12) {
 					mappedSlot = had_right ? "fingerL" : "fingerR";
@@ -265,7 +256,7 @@ internal class Exporter : IDisposable {
 				if (ilvl > maxIlvl)
 					maxIlvl = ilvl;
 
-				obj.Add(mappedSlot, item.ItemID);
+				obj.Add(mappedSlot, item.ID);
 
 				var melds = new JObject();
 				int i = 1;
@@ -274,7 +265,7 @@ internal class Exporter : IDisposable {
 					if (raw.ID == 0)
 						continue;
 
-					var materia = raw.GetMateria(MateriaSheet);
+					var materia = raw.Row();
 					if (materia == null || raw.Grade >= materia.Item.Length)
 						continue;
 
@@ -293,8 +284,8 @@ internal class Exporter : IDisposable {
 			obj.Add("minItemLevel", minIlvl);
 			obj.Add("maxItemLevel", maxIlvl);
 
-			if (gearset.Tribe.HasValue)
-				obj.Add("clan", gearset.Tribe.Value);
+			if (gearset.Tribe != 0)
+				obj.Add("clan", gearset.Tribe);
 
 			PluginLog.Information($"Result:\n{obj.ToString(Formatting.None)}");
 
@@ -316,10 +307,10 @@ internal class Exporter : IDisposable {
 				PluginLog.LogInformation($"Success. Response: {value}");
 				var parsedResponse = JsonConvert.DeserializeObject<EtroResponse>(value);
 				if (parsedResponse != null && !string.IsNullOrEmpty(parsedResponse.Id)) {
-					TryOpenURL($"https://etro.gg/gearset/{parsedResponse.Id}");
+					result.Url = $"https://etro.gg/gearset/{parsedResponse.Id}";
 
 				} else {
-					Error = "Etro returned invalid response.";
+					result.Error = "Etro returned invalid response.";
 				}
 
 			} else {
@@ -327,18 +318,18 @@ internal class Exporter : IDisposable {
 				PluginLog.LogError($"Failure. Error: {response.StatusCode}\nDetails:{value}");
 				var parsedError = JsonConvert.DeserializeObject<EtroError>(value);
 				if (parsedError != null && !string.IsNullOrEmpty(parsedError.Detail)) {
-					Error = $"Etro returned an error: {parsedError.Detail}";
+					result.Error = $"Etro returned an error: {parsedError.Detail}";
 				} else {
-					Error = "Etro returned invalid response.";
+					result.Error = "Etro returned invalid response.";
 				}
 			}
 
 		} catch (Exception ex) {
 			PluginLog.Error($"An error occurred while exporting gearset to Etro.\nDetails: {ex}");
-			Error = "An error occurred.";
+			result.Error = "An error occurred. See the log for details.";
 		}
 
-		Exporting = false;
+		return result;
 	}
 
 
@@ -448,28 +439,16 @@ internal class Exporter : IDisposable {
 
 	#endregion
 
-	private async Task Task_ExportAriyala(Gearset gearset) {
-		Exporting = true;
-		Error = null;
+	private async Task<ExportResponse> Task_ExportAriyala(EquipmentSet gearset) {
+		ExportResponse result = new ExportResponse();
 
 		try {
 			PluginLog.LogInformation("Exporting gearset to Ariyala.");
 
-			var ItemSheet = Plugin.DataManager.GetExcelSheet<ExtendedItem>();
-			var MateriaSheet = Plugin.DataManager.GetExcelSheet<Materia>();
-			var ClassSheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-
-			if (ItemSheet == null || MateriaSheet == null || ClassSheet == null) {
-				Error = "Unable to load data.";
-				Exporting = false;
-				return;
-			}
-
-			var jobData = gearset.Class == 0 ? null : ClassSheet.GetRow(gearset.Class);
+			var jobData = gearset.JobRow();
 			if (jobData == null) {
-				Error = "Unable to detect class.";
-				Exporting = false;
-				return;
+				result.Error = "Unable to detect class.";
+				return result;
 			}
 
 			// This is very stupid code, but I can't be bothered to refactor it now.
@@ -479,9 +458,8 @@ internal class Exporter : IDisposable {
 				job = abbrev;
 
 			if (job == null) {
-				Error = "Unable to map job to Ariyala.";
-				Exporting = false;
-				return;
+				result.Error = "Unable to map job to Ariyala.";
+				return result;
 			}
 
 			var items = new JObject();
@@ -496,27 +474,27 @@ internal class Exporter : IDisposable {
 
 			bool had_right = false;
 
-			foreach (var item in gearset.Items) {
-				var data = item.GetItem(ItemSheet);
-				if (data == null)
+			foreach (var rawItem in gearset.Items) {
+				ExtendedItem? item = rawItem.Row();
+				if (item == null)
 					continue;
 
-				uint slot = data.EquipSlotCategory.Row;
+				uint slot = item.EquipSlotCategory.Row;
 				string? mappedSlot;
 				if (slot == 12) {
 					mappedSlot = had_right ? "ringLeft" : "ringRight";
 					had_right = true;
 
 				} else if (!ARIYALA_SLOT_MAP.TryGetValue(slot, out mappedSlot)) {
-					PluginLog.Information($"Unknown Slot for Item: {data.Name} -- Slot: {slot}");
+					PluginLog.Information($"Unknown Slot for Item: {item.Name} -- Slot: {slot}");
 					continue;
 				}
 
 				if (mappedSlot == null)
 					continue;
 
-				uint ilvl = data.LevelItem.Row;
-				int level = data.LevelEquip;
+				uint ilvl = item.LevelItem.Row;
+				int level = item.LevelEquip;
 
 				if (ilvl < minIlvl)
 					minIlvl = ilvl;
@@ -528,32 +506,32 @@ internal class Exporter : IDisposable {
 				if (level > maxLevel)
 					maxLevel = level;
 
-				items.Add(mappedSlot, item.ItemID);
+				items.Add(mappedSlot, rawItem.ID);
 
 				List<string> melds = new();
 
-				foreach (var raw in item.Melds) {
-					if (raw.ID == 0)
+				foreach (var rawMateria in rawItem.Melds) {
+					if (rawMateria.ID == 0)
 						continue;
 
-					var materia = raw.GetMateria(MateriaSheet);
-					if (materia == null || raw.Grade >= materia.Value.Length)
+					var materia = rawMateria.Row();
+					if (materia == null || rawMateria.Grade >= materia.Value.Length)
 						continue;
 
 					uint stat = materia.BaseParam.Row;
 					if (!ARIYALA_STAT_MAP.TryGetValue(stat, out string? mappedStat)) {
-						PluginLog.Information($"Unknown Stat for Materia: {materia.Item[raw.Grade]?.Value?.Name} -- Stat: {stat}");
+						PluginLog.Information($"Unknown Stat for Materia: {materia.Item[rawMateria.Grade]?.Value?.Name} -- Stat: {stat}");
 						continue;
 					}
 
 					if (mappedStat == null)
 						continue;
 
-					melds.Add($"{mappedStat}:{raw.Grade}");
+					melds.Add($"{mappedStat}:{rawMateria.Grade}");
 				}
 
 				if (melds.Count > 0)
-					materiaData.Add($"{mappedSlot}-{item.ItemID}", new JArray(melds));
+					materiaData.Add($"{mappedSlot}-{rawItem.ID}", new JArray(melds));
 			}
 
 			var datasets = new JObject() {
@@ -596,7 +574,7 @@ internal class Exporter : IDisposable {
 				}
 			};
 
-			if (!gearset.Tribe.HasValue || !ARIYALA_RACE_ID_MAP.TryGetValue(gearset.Tribe.Value, out uint race))
+			if (!ARIYALA_RACE_ID_MAP.TryGetValue(gearset.Tribe, out uint race))
 				race = 0;
 
 			var obj = new JObject {
@@ -606,7 +584,7 @@ internal class Exporter : IDisposable {
 				{ "raceID", race },
 				{ "level", 90 },
 				{ "filter", filter },
-				{ "myInventory", new JArray(gearset.Items.Select(x => x.ItemID).ToArray()) }
+				{ "myInventory", new JArray(gearset.Items.Select(x => x.ID).ToArray()) }
 			};
 
 			PluginLog.Information($"Result:\n{obj.ToString(Newtonsoft.Json.Formatting.None)}");
@@ -627,20 +605,20 @@ internal class Exporter : IDisposable {
 				string? value = await response.Content.ReadAsStringAsync();
 				PluginLog.LogInformation($"Success. ID: {value}");
 				if (!string.IsNullOrEmpty(value))
-					TryOpenURL($"https://ffxiv.ariyala.com/{value}");
+					result.Url = $"https://ffxiv.ariyala.com/{value}";
 			} else {
 				string? value = await response.Content.ReadAsStringAsync();
 				PluginLog.LogError($"Failure. Error: {response.StatusCode}\nDetails:{value}");
-				Error = "Ariyala returned invalid response.";
+				result.Error = "Ariyala returned invalid response.";
 			}
 
 		} catch (Exception ex) {
 			/* Do nothing~ */
 			PluginLog.Error($"An error occurred while exporting gearset to Ariyala.\nDetails: {ex}");
-			Error = "An error occurred.";
+			result.Error = "An error occurred. See log for details.";
 		}
 
-		Exporting = false;
+		return result;
 	}
 
 	#endregion

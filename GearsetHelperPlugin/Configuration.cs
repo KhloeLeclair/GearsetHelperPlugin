@@ -14,8 +14,14 @@ public class Configuration : IPluginConfiguration
 
 	public bool ShowItems { get; set; } = false;
 
+	public bool DisplayWithExamine { get; set; } = true;
+	public bool DisplayWithCharacter { get; set; } = true;
+
 	public bool AttachToExamine { get; set; } = true;
-	public int AttachSide { get; set; } = 1;
+	public bool AttachToCharacter { get; set; } = true;
+
+	public int AttachSideExamine { get; set; } = 1;
+	public int AttachSideCharacter { get; set; } = 1;
 
     // the below exist just to make saving less cumbersome
 

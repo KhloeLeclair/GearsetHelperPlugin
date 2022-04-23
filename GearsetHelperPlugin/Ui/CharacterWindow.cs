@@ -12,58 +12,49 @@ using GearsetHelperPlugin.Models;
 
 namespace GearsetHelperPlugin.Ui;
 
-internal class ExamineWindow : BaseWindow {
+internal class CharacterWindow : BaseWindow {
 
-	private uint examineLoadStage = 4;
+	protected override string Name => "Character";
 
-	protected override string Name => "Examine";
+	internal CharacterWindow(PluginUI ui) : base(ui) {
 
-	internal ExamineWindow(PluginUI ui) : base(ui) {
-		Ui.Plugin.Functions.ExamineOnRefresh += ExamineRefreshed;
 	}
 
 	public override void Dispose(bool disposing) {
-		Ui.Plugin.Functions.ExamineOnRefresh -= ExamineRefreshed;
-	}
-
-	private void ExamineRefreshed(ushort menuId, int val, uint loadStage) {
-		// Just save the load state so our draw call knows if data is loaded or not.
-		if (loadStage == 1 || loadStage > examineLoadStage)
-			examineLoadStage = loadStage;
+		
 	}
 
 	internal unsafe void Draw() {
-		if (!Ui.Plugin.Config.DisplayWithExamine) {
+		if (!Ui.Plugin.Config.DisplayWithCharacter) {
 			CachedSet = null;
 			return;
 		}
 
-		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
-		if (examineAddon == null || !examineAddon->IsVisible) {
+		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
+		if (charAddon is null || ! charAddon->IsVisible) {
 			CachedSet = null;
 			return;
 		}
 
-		var root = examineAddon->RootNode;
+		var root = charAddon->RootNode;
 		if (root is null)
 			return;
 
 		DrawWindow(
-			Ui.Plugin.Config.AttachToExamine,
-			Ui.Plugin.Config.AttachSideExamine,
-			examineAddon->X,
-			examineAddon->Y,
-			(ushort) (root->Width * examineAddon->Scale)
+			Ui.Plugin.Config.AttachToCharacter,
+			Ui.Plugin.Config.AttachSideCharacter,
+			charAddon->X,
+			charAddon->Y,
+			(ushort) (root->Width * charAddon->Scale)
 		);
 	}
 
-
 	protected override unsafe InventoryContainer* GetInventoryContainer() {
-		return InventoryManager.Instance()->GetInventoryContainer(InventoryType.Examine);
+		return InventoryManager.Instance()->GetInventoryContainer(InventoryType.EquippedItems);
 	}
 
 	protected override bool HasEquipment() {
-		return examineLoadStage >= 4;
+		return true;
 	}
 
 	protected override void UpdatePlayerData(EquipmentSet set) {
@@ -84,8 +75,10 @@ internal class ExamineWindow : BaseWindow {
 	private unsafe PlayerCharacter? GetActor() {
 		// TODO: Rewrite this entire method, and probably factor it out.
 
-		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
-		if (examineAddon == null || !examineAddon->IsVisible)
+		return Ui.Plugin.ClientState.LocalPlayer;
+
+		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
+		if (charAddon == null || !charAddon->IsVisible)
 			return null;
 
 		Lazy<Dictionary<string, PlayerCharacter>> players = new(() => {
@@ -104,8 +97,8 @@ internal class ExamineWindow : BaseWindow {
 			return result;
 		});
 
-		var nodeList = examineAddon->UldManager.NodeList;
-		ushort count = examineAddon->UldManager.NodeListCount;
+		var nodeList = charAddon->UldManager.NodeList;
+		ushort count = charAddon->UldManager.NodeListCount;
 
 		for (ushort i = 0; i < count; i++) {
 			var obj = nodeList[i];
@@ -127,4 +120,5 @@ internal class ExamineWindow : BaseWindow {
 
 		return null;
 	}
+
 }

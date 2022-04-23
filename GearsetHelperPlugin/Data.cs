@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+
+using Lumina.Excel;
+using Lumina.Excel.GeneratedSheets;
+using GearsetHelperPlugin.Sheets;
 
 namespace GearsetHelperPlugin;
 
@@ -35,12 +40,16 @@ internal enum Stat {
 
 	TEN = 19,
 	DEF = 21,
+	MDF = 24,
 
 	DH = 22,
 	CRT = 27,
 	DET = 44,
 	SKS = 45,
 	SPS = 46,
+
+	MainAttribute = 55,
+	SecondaryAttribute = 56,
 
 	Craftsmanship = 70,
 	Control = 71,
@@ -49,6 +58,44 @@ internal enum Stat {
 }
 
 internal static class Data {
+
+	#region Sheet Access
+
+	internal static ExcelSheet<ExtendedItem>? ItemSheet { get; set; }
+	internal static ExcelSheet<ExtendedBaseParam>? ParamSheet { get; set; }
+	internal static ExcelSheet<ParamGrow>? GrowSheet { get; set; }
+	internal static ExcelSheet<ExtendedItemLevel>? LevelSheet { get; set; }
+	internal static ExcelSheet<Materia>? MateriaSheet { get; set; }
+	internal static ExcelSheet<Race>? RaceSheet { get; set; }
+	internal static ExcelSheet<Tribe>? TribeSheet { get; set; }
+	internal static ExcelSheet<ClassJob>? ClassSheet { get; set; }
+
+	[MemberNotNullWhen(true, nameof(ItemSheet), nameof(ParamSheet), nameof(GrowSheet), nameof(LevelSheet), nameof(MateriaSheet), nameof(RaceSheet), nameof(TribeSheet), nameof(ClassSheet))]
+	internal static bool CheckSheets(ExcelModule? excel = null) {
+		if (ItemSheet == null || ParamSheet == null || GrowSheet == null || LevelSheet == null || MateriaSheet == null || RaceSheet == null || TribeSheet == null || ClassSheet == null) {
+			if (excel is not null) {
+				LoadSheets(excel);
+				return CheckSheets(null);
+
+			} else
+				return false;
+		}
+
+		return true;
+	}
+
+	internal static void LoadSheets(ExcelModule excel) {
+		ItemSheet = excel.GetSheet<ExtendedItem>();
+		ParamSheet = excel.GetSheet<ExtendedBaseParam>();
+		GrowSheet = excel.GetSheet<ParamGrow>();
+		LevelSheet = excel.GetSheet<ExtendedItemLevel>();
+		MateriaSheet = excel.GetSheet<Materia>();
+		TribeSheet = excel.GetSheet<Tribe>();
+		RaceSheet = excel.GetSheet<Race>();
+		ClassSheet = excel.GetSheet<ClassJob>();
+	}
+
+	#endregion
 
 	public static int GetBaseStatAtLevel(Stat stat, uint level) {
 		if (stat == Stat.GP)
@@ -84,6 +131,22 @@ internal static class Data {
 		Stat.SKS,
 		Stat.SPS
 	};
+
+
+	internal static readonly Dictionary<uint, int> COEFFICIENTS = new() {
+		[(int) Stat.CRT] = 200,
+		[(int) Stat.DET] = 140,
+		[(int) Stat.DH]  = 550,
+		[(int) Stat.SKS] = 130,
+		[(int) Stat.SPS] = 130,
+
+		[(int) Stat.TEN] = 100,
+		[(int) Stat.PIE] = 150,
+
+		[(int) Stat.DEF] = 15,
+		[(int) Stat.MDF] = 15,
+	};
+
 
 	internal static readonly Dictionary<uint, StatAtLevel> LevelStats = new() {
 		[00] = new (Main: 0, Sub: 0),
@@ -178,7 +241,4 @@ internal static class Data {
 		[89] = new (Main: 385, Sub: 398),
 		[90] = new (Main: 390, Sub: 400),
 	};
-
-
-
 }

@@ -10,13 +10,16 @@ internal class PluginUI : IDisposable {
 
 	internal Plugin Plugin { get; }
 
-	private readonly ExamineWindow ExamineHelper;
+	private readonly ExamineWindow ExamineWindow;
+	private readonly CharacterWindow CharacterWindow;
+
 	private readonly SettingsWindow Settings;
 
     public PluginUI(Plugin plugin) {
 		Plugin = plugin;
 
-		ExamineHelper = new ExamineWindow(this);
+		ExamineWindow = new ExamineWindow(this);
+		CharacterWindow = new CharacterWindow(this);
 		Settings = new SettingsWindow(this);
 
 		Plugin.Interface.UiBuilder.Draw += Draw;
@@ -34,6 +37,7 @@ internal class PluginUI : IDisposable {
 
     private void Draw() {
         Settings.Draw();
-		ExamineHelper.Draw();
+		ExamineWindow.Draw();
+		CharacterWindow.Draw();
     }
 }

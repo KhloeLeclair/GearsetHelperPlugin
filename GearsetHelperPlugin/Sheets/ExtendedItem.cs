@@ -8,9 +8,10 @@ namespace GearsetHelperPlugin.Sheets;
 [Sheet("Item")]
 public class ExtendedItem : Item {
 
-	public byte LevelSyncFlag { get; set; }
-
-	public LazyRow<ExtendedClassJobCategory>? ExtendedClassJobCategory { get; set; }
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+	public LazyRow<ExtendedClassJobCategory> ExtendedClassJobCategory { get; set; }
+	public LazyRow<ExtendedItemLevel> ExtendedItemLevel { get; set; }
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
 	public UnkData59Obj[] BaseParam => UnkData59;
 	public UnkData73Obj[] BaseParamSpecial => UnkData73;
@@ -19,6 +20,6 @@ public class ExtendedItem : Item {
 		base.PopulateData(parser, gameData, language);
 
 		ExtendedClassJobCategory = new LazyRow<ExtendedClassJobCategory>(gameData, ClassJobCategory.Row, language);
-		LevelSyncFlag = parser.ReadColumn<byte>(89);
+		ExtendedItemLevel = new LazyRow<ExtendedItemLevel>(gameData, LevelItem.Row, language);
 	}
 }

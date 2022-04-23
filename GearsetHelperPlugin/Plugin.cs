@@ -1,3 +1,6 @@
+using System.IO;
+
+using Dalamud;
 using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects;
@@ -6,6 +9,8 @@ using Dalamud.Game.Command;
 using Dalamud.Game.Gui;
 using Dalamud.IoC;
 using Dalamud.Plugin;
+
+using GearsetHelperPlugin.Models;
 
 namespace GearsetHelperPlugin;
 
@@ -43,29 +48,39 @@ public class Plugin : IDalamudPlugin
 
 	internal GameFunctions Functions { get; }
 
+	internal Localization Localization { get; }
+
 	internal Configuration Config { get; }
 	internal PluginUI Ui { get; }
-
 	internal Exporter Exporter { get; }
 
 	#pragma warning disable 8618
 	public Plugin() {
 
+		string i18n_path = Path.Join(
+			Path.GetDirectoryName(Interface!.AssemblyLocation.FullName),
+			"i18n"
+		);
+
+		Localization = new Localization(i18n_path);
+		Localization.SetupWithUiCulture();
+
 		Config = Interface!.GetPluginConfig() as Configuration ?? new Configuration();
 		Config.Initialize(Interface);
 
-		Functions = new GameFunctions(this);
-		Ui = new PluginUI(this);
-		Exporter = new Exporter(this);
+		Data.LoadSheets(DataManager!.Excel);
 
+		Functions = new GameFunctions(this);
+		Exporter = new Exporter(this);
+		Ui = new PluginUI(this);
 
 	}
 	#pragma warning restore 8618
 
 	public void Dispose()
     {
-		Functions.Dispose();
-        Ui.Dispose();
+		Ui.Dispose();
 		Exporter.Dispose();
+		Functions.Dispose();
     }
 }
