@@ -71,6 +71,7 @@ public class Plugin : IDalamudPlugin
 		Data.FoodMinIlvl = Config.FoodMinIlvl;
 		Data.FoodMinIlvlDoHL = Config.FoodMinIlvlDoHL;
 		Data.LoadSheets(DataManager!.Excel);
+		Data.LoadFoodAsync();
 
 		Functions = new GameFunctions(this);
 		Exporter = new Exporter(this);

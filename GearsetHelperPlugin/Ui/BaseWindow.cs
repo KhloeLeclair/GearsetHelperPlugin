@@ -201,6 +201,9 @@ internal abstract class BaseWindow : IDisposable {
 		if (items == null)
 			return null;
 
+		var sw = new System.Diagnostics.Stopwatch();
+		sw.Start();
+
 		EquipmentSet result = new(items);
 
 		result.Level = 90;
@@ -210,6 +213,10 @@ internal abstract class BaseWindow : IDisposable {
 		result.Medicine = SelectedMedicine;
 
 		result.Recalculate();
+
+		sw.Stop();
+		Dalamud.Logging.PluginLog.Log($"Processed equipment in {sw.ElapsedMilliseconds}ms");
+
 		return result;
 	}
 

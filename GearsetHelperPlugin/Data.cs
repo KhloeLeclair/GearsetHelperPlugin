@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+
+using Dalamud.Logging;
 
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
@@ -101,11 +103,14 @@ internal static class Data {
 		ClassSheet = excel.GetSheet<ClassJob>();
 
 		_Food = null;
+		FoodLoaded = false;
 	}
 
 	#endregion
 
 	#region Food
+
+	private static bool FoodLoaded = false;
 
 	private static uint _FoodMinIlvlDoHL = 0;
 	internal static uint FoodMinIlvlDoHL {
@@ -114,6 +119,7 @@ internal static class Data {
 			if (_FoodMinIlvlDoHL != value) {
 				_FoodMinIlvlDoHL = value;
 				_Food = null;
+				FoodLoaded = false;
 			}
 		}
 	}
@@ -125,6 +131,7 @@ internal static class Data {
 			if (_FoodMinIlvl != value) {
 				_FoodMinIlvl = value;
 				_Food = null;
+				FoodLoaded = false;
 			}
 		}
 	}
@@ -152,13 +159,46 @@ internal static class Data {
 
 	[MemberNotNull(nameof(_Food), nameof(_Medicine))]
 	private static void LoadFood() {
+		FoodLoaded = true;
 		_Food = new List<Food>();
 		_Medicine = new List<Food>();
 
+		LoadFood(_Food, _Medicine);
+	}
+
+	internal static Task LoadFoodAsync() {
+		return Task.Run(async () => {
+			try {
+				var Food = new List<Food>();
+				var Medicine = new List<Food>();
+
+				LoadFood(Food, Medicine);
+
+				if (!FoodLoaded) {
+					_Food = Food;
+					_Medicine = Medicine;
+				} else
+					PluginLog.Log("Started loading food while LoadFoodAsync was running?");
+
+				FoodLoaded = true;
+
+			} catch (Exception ex) {
+				PluginLog.LogError($"Encountered an error while loading food in a thread. Details:\n{ex}");
+			}
+		});
+	}
+
+	private static void LoadFood(List<Food> foodList, List<Food> medicineList) { 
 		if (!CheckSheets())
 			return;
 
+		var sw = new Stopwatch();
+		sw.Start();
+
 		foreach(ExtendedItem item in ItemSheet) {
+			if (item.ItemUICategory.Row != 46 && item.ItemUICategory.Row != 44)
+				continue;
+
 			ItemAction? action = item.ItemAction.Value;
 			if (action is null)
 				continue;
@@ -169,7 +209,7 @@ internal static class Data {
 				if (food is not null) {
 					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
 					fdata.UpdateStats(food);
-					_Food.Add(fdata);
+					foodList.Add(fdata);
 				}
 			}
 
@@ -179,10 +219,14 @@ internal static class Data {
 				if (food is not null) {
 					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
 					fdata.UpdateStats(food);
-					_Medicine.Add(fdata);
+					medicineList.Add(fdata);
 				}
 			}
 		}
+
+		sw.Stop();
+
+		PluginLog.Log($"Found {foodList.Count} food and {medicineList.Count} medicine in {sw.ElapsedMilliseconds}ms");
 	}
 
 	#endregion
