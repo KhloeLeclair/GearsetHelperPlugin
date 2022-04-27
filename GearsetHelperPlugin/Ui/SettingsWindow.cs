@@ -194,6 +194,8 @@ internal class SettingsWindow {
 					ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.settings.logging-in", "Logging in..."));
 			}
 		}
+
+		ImGui.End();
 	}
 
 }

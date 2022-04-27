@@ -49,6 +49,9 @@ internal abstract class BaseWindow : IDisposable {
 	protected Food? SelectedFood;
 	protected Food? SelectedMedicine;
 
+	private byte SelectedLevelSync = 90;
+	private uint SelectedIlvlSync = 665;
+
 	private Task<Exporter.ExportResponse>? ExportTask;
 	private Exporter.ExportResponse? ExportResponse;
 
@@ -209,6 +212,9 @@ internal abstract class BaseWindow : IDisposable {
 		result.Level = 90;
 
 		UpdatePlayerData(result);
+
+		result.UpdateSync(SelectedLevelSync, SelectedIlvlSync);
+
 		result.Food = SelectedFood;
 		result.Medicine = SelectedMedicine;
 
@@ -256,18 +262,53 @@ internal abstract class BaseWindow : IDisposable {
 		bool result = false;
 		choice = null;
 
-		if (ImGui.BeginCombo(label, selected?.ItemRow()?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
-			bool none_selected = selected is null;
-			if (ImGui.Selectable(Localization.Localize("gui.food.none", "(None)"), none_selected)) {
-				choice = null;
-				result = true;
+		ExtendedItem? selitem = selected?.ItemRow();
+
+		if (ImGui.BeginCombo(label, selitem?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
+			float scroll = ImGui.GetScrollY();
+			float lineHeight = 20 * ImGui.GetIO().FontGlobalScale;
+			float padX = ImGui.GetStyle().FramePadding.X;
+
+			Vector2 size = new(ImGui.GetWindowContentRegionWidth(), 2 * lineHeight);
+
+			// Now skip off-screen entries.
+			int start = (int) Math.Floor(scroll / size.Y);
+			if (start < 0)
+				start = 0;
+
+			int end = start + 4;
+
+			if (start > 0)
+				ImGui.Dummy(new Vector2(size.X, size.Y * start));
+
+			// None Element
+			if (start == 0) {
+				bool none_selected = selected is null;
+				ImGui.PushID($"food#none");
+				var oldPos = ImGui.GetCursorPos();
+				if (ImGui.Selectable("", none_selected, ImGuiSelectableFlags.None, size)) {
+					choice = null;
+					result = true;
+				}
+				ImGui.PopID();
+				if (none_selected)
+					ImGui.SetItemDefaultFocus();
+
+				var newPos = ImGui.GetCursorPos();
+				ImGui.SetCursorPosX(oldPos.X + (size.Y - lineHeight) / 2);
+				ImGui.SetCursorPosY(oldPos.Y + (size.Y - lineHeight) / 2);
+
+				ImGui.Text(Localization.Localize("gui.food.none", "(None)"));
+				ImGui.SetCursorPos(newPos);
 			}
-			if (none_selected)
-				ImGui.SetItemDefaultFocus();
 
-			Vector2 size = new(ImGui.GetWindowContentRegionWidth(), 40 * ImGui.GetIO().FontGlobalScale);
+			if (start < 1)
+				start = 1;
+			if (end > choices.Count)
+				end = choices.Count;
 
-			foreach (Food food in choices) {
+			for(int i = start - 1; i < end; i++) {
+				Food food = choices[i];
 				ExtendedItem? item = food.ItemRow();
 				if (item is null)
 					continue;
@@ -294,20 +335,24 @@ internal abstract class BaseWindow : IDisposable {
 					ImGui.Image(image.ImGuiHandle, new Vector2(image.Width, image.Height));
 				}
 
-				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y);
 
 				ImGui.Text(item.Name);
 				ImGui.SameLine();
 				ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
 
-				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * ImGui.GetStyle().FramePadding.X);
+				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
 
 				ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine ?? string.Empty);
 
 				ImGui.SetCursorPos(newPos);
 			}
+
+			if (end < choices.Count)
+				ImGui.Dummy(new Vector2(size.X, size.Y * (choices.Count - end)));
+
 			ImGui.EndCombo();
 		}
 
@@ -315,6 +360,9 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	protected void DrawWindow(bool attach, int side, short x, short y, ushort width) {
+		if (! Data.IsFoodLoaded)
+			return;
+
 		UpdateEquipmentSet();
 
 		if (ExportTask != null) {
@@ -421,30 +469,50 @@ internal abstract class BaseWindow : IDisposable {
 					ExportTask = Ui.Plugin.Exporter.ExportTeamcraft(CachedSet);
 			}
 
-			if (SelectedFood is not null || CachedSet.RelevantFood.Count > 0) {
-				if (DrawFoodCombo(
-					Localization.Localize("gui.food", "Food"),
-					SelectedFood,
-					CachedSet.RelevantFood,
-					out Food? choice
-				)) {
-					SelectedFood = choice;
-					CachedSet.UpdateFood(choice);
+			if (ImGui.CollapsingHeader(Localization.Localize("gui.food-sync", "Food / Sync Down"), ImGuiTreeNodeFlags.None)) {
+				int levelsync = SelectedLevelSync;
+				if (ImGui.InputInt(Localization.Localize("gui.level-sync", "Level Sync"), ref levelsync, 1, 10)) {
+					SelectedLevelSync = (byte) Math.Clamp(levelsync, 1, 90);
+					CachedSet.UpdateSync(SelectedLevelSync, 0);
+					SelectedIlvlSync = CachedSet.ILvlSync;
+					CachedSet.Recalculate();
 				}
 
 				ImGui.SameLine();
-				ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
-			}
+				ImGuiComponents.HelpMarker(Localization.Localize("gui.about-level-sync", "Simulate stats at a specific synced level or item level. Melded materia do not apply when synced down."));
 
-			if (SelectedMedicine is not null || CachedSet.RelevantMedicine.Count > 0) {
-				if (DrawFoodCombo(
-					Localization.Localize("gui.medicine", "Medicine"),
-					SelectedMedicine,
-					CachedSet.RelevantMedicine,
-					out Food? choice
-				)) {
-					SelectedMedicine = choice;
-					CachedSet.UpdateMedicine(choice);
+				int ilvlsync = (int) (SelectedIlvlSync == 0 ? CachedSet.ILvlSync : SelectedIlvlSync);
+				if (ImGui.InputInt(Localization.Localize("gui.ilvl-sync", "Item Level Sync"), ref ilvlsync, 5, 10)) {
+					SelectedIlvlSync = (uint) Math.Clamp(ilvlsync, 5, 665);
+					CachedSet.UpdateSync(SelectedLevelSync, SelectedIlvlSync);
+					CachedSet.Recalculate();
+				}
+
+				if (SelectedFood is not null || CachedSet.RelevantFood.Count > 0) {
+					if (DrawFoodCombo(
+						Localization.Localize("gui.food", "Food"),
+						SelectedFood,
+						CachedSet.RelevantFood,
+						out Food? choice
+					)) {
+						SelectedFood = choice;
+						CachedSet.UpdateFood(choice);
+					}
+
+					ImGui.SameLine();
+					ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
+				}
+
+				if (SelectedMedicine is not null || CachedSet.RelevantMedicine.Count > 0) {
+					if (DrawFoodCombo(
+						Localization.Localize("gui.medicine", "Medicine"),
+						SelectedMedicine,
+						CachedSet.RelevantMedicine,
+						out Food? choice
+					)) {
+						SelectedMedicine = choice;
+						CachedSet.UpdateMedicine(choice);
+					}
 				}
 			}
 
@@ -552,9 +620,8 @@ internal abstract class BaseWindow : IDisposable {
 					}
 
 					TextureWrap? icon = GetIcon(item, rawItem.HighQuality);
+					int height = icon is null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 					if (icon != null) {
-						int height = Math.Min(icon.Height, (int) (32 * scale));
-
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
 						if (ImGui.IsItemClicked())
 							Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
@@ -566,6 +633,11 @@ internal abstract class BaseWindow : IDisposable {
 					ImGui.Text(item.Name);
 					if (ImGui.IsItemClicked())
 						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
+
+					if (CachedSet.ILvlSync > 0 && item.LevelItem.Row > CachedSet.ILvlSync) {
+						ImGui.SameLine();
+						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
+					}
 
 					if (stats is not null && stats.Count > 0)
 						DrawStatTable(stats.Values, CachedSet.Params, false, true);

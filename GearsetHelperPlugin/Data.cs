@@ -63,6 +63,32 @@ internal enum Stat {
 
 internal static class Data {
 
+	#region Stat Abbreviations
+
+	internal static readonly Dictionary<Stat, string> ABBREVIATIONS = new() {
+		{ Stat.STR, "STR" },
+		{ Stat.DEX, "DEX" },
+		{ Stat.VIT, "VIT" },
+		{ Stat.INT, "INT" },
+		{ Stat.MND, "MND" },
+		{ Stat.PIE, "PIE" },
+
+		{ Stat.HP, "HP" },
+		{ Stat.MP, "MP" },
+		{ Stat.TP, "TP" },
+		{ Stat.GP, "GP" },
+		{ Stat.CP, "CP" },
+
+		{ Stat.TEN, "TEN" },
+		{ Stat.DH, "DH" },
+		{ Stat.CRT, "CRT" },
+		{ Stat.DET, "DET" },
+		{ Stat.SKS, "SKS" },
+		{ Stat.SPS, "SPS" }
+	};
+
+	#endregion
+
 	#region Sheet Access
 
 	internal static ExcelSheet<ExtendedItem>? ItemSheet { get; set; }
@@ -110,17 +136,16 @@ internal static class Data {
 
 	#region Food
 
+	internal static bool IsFoodLoaded => FoodLoaded;
+
+	private static bool LoadingFood = false;
 	private static bool FoodLoaded = false;
 
 	private static uint _FoodMinIlvlDoHL = 0;
 	internal static uint FoodMinIlvlDoHL {
 		get => _FoodMinIlvlDoHL;
 		set {
-			if (_FoodMinIlvlDoHL != value) {
-				_FoodMinIlvlDoHL = value;
-				_Food = null;
-				FoodLoaded = false;
-			}
+			_FoodMinIlvlDoHL = value;
 		}
 	}
 
@@ -128,11 +153,7 @@ internal static class Data {
 	internal static uint FoodMinIlvl {
 		get => _FoodMinIlvl;
 		set {
-			if (_FoodMinIlvl != value) {
-				_FoodMinIlvl = value;
-				_Food = null;
-				FoodLoaded = false;
-			}
+			_FoodMinIlvl = value;
 		}
 	}
 
@@ -166,8 +187,13 @@ internal static class Data {
 		LoadFood(_Food, _Medicine);
 	}
 
-	internal static Task LoadFoodAsync() {
+	internal static Task? LoadFoodAsync() {
 		return Task.Run(async () => {
+			if (LoadingFood)
+				return;
+
+			LoadingFood = true;
+
 			try {
 				var Food = new List<Food>();
 				var Medicine = new List<Food>();
@@ -185,6 +211,8 @@ internal static class Data {
 			} catch (Exception ex) {
 				PluginLog.LogError($"Encountered an error while loading food in a thread. Details:\n{ex}");
 			}
+
+			LoadingFood = false;
 		});
 	}
 

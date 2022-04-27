@@ -11,7 +11,7 @@ internal record StatData(
 	public int Gear { get; set; }
 	public int Delta { get; set; }
 	public int Waste { get; set; }
-	public int Limit { get; set; }
+	public int Limit { get; set; } = -1;
 
 	public int Food { get; set; }
 
@@ -25,7 +25,7 @@ internal record StatData(
 	public int NextTier { get; set; }
 
 	public void UpdateWaste() {
-		if (Full > Limit && Limit > 0)
+		if (Full > Limit && Limit >= 0)
 			Waste = Full - Limit;
 		else
 			Waste = 0;

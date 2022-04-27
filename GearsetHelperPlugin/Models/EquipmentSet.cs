@@ -43,6 +43,12 @@ internal class EquipmentSet {
 
 	#region Gear Data
 
+	public byte EffectiveLevel => LevelSync != 0 && LevelSync < Level ? LevelSync : Level;
+
+	public byte LevelSync { get; set; }
+
+	public uint ILvlSync { get; set; }
+
 	/// <summary>
 	/// Food to apply to the stats.
 	/// </summary>
@@ -111,7 +117,8 @@ internal class EquipmentSet {
 	public ParamGrow? GrowRow() {
 		if (!Data.CheckSheets() || Level == 0)
 			return null;
-		return Data.GrowSheet.GetRow(Level);
+
+		return Data.GrowSheet.GetRow(EffectiveLevel);
 	}
 
 	public Race? RaceRow() {
@@ -159,12 +166,39 @@ internal class EquipmentSet {
 	internal bool UpdatePlayer(string? name, byte gender, byte race, byte tribe, byte level) {
 		PlayerName = name;
 
+		// Ensure that the Level is accurate
+		foreach(var item in Items) {
+			var data = item.Row();
+			if (data is not null && data.LevelEquip > level)
+				level = data.LevelEquip;
+		}
+
 		bool changed = Tribe != tribe || Level != level;
 
 		Gender = gender;
 		Race = race;
 		Tribe = tribe;
 		Level = level;
+
+		return changed;
+	}
+
+	internal bool UpdateSync(byte levelSync, uint ilvlSync) {
+		if (ilvlSync == 0 && Data.CheckSheets()) {
+			byte elevel = levelSync < Level ? levelSync : Level;
+			if (elevel >= 90)
+				ilvlSync = 665;
+			else {
+				ParamGrow? growth = Data.GrowSheet.GetRow(levelSync);
+				if (growth is not null)
+					ilvlSync = growth.ItemLevelSync;
+			}
+		}
+
+		bool changed = levelSync != LevelSync && ilvlSync != ILvlSync;
+
+		LevelSync = levelSync;
+		ILvlSync = ilvlSync;
 
 		return changed;
 	}
@@ -445,18 +479,25 @@ internal class EquipmentSet {
 			)) ;
 		}
 
-		if (job is not null)
+		if (job is not null) {
+			string spec;
+			if (job.DohDolJobIndex > 0 && HasCrystal)
+				spec = $" ({Dalamud.Localization.Localize("calc.specialist", "Specialist")})";
+			else
+				spec = string.Empty;
+
 			Calculated.Add(new CalculatedStat(
 				"calc.class",
 				"Class",
-				CultureInfo.CurrentCulture.TextInfo.ToTitleCase(job.Name)
+				CultureInfo.CurrentCulture.TextInfo.ToTitleCase(job.Name) + spec
 			));
+		}
 
 		if (Level != 0)
 			Calculated.Add(new CalculatedStat(
 				"calc.level",
 				"Level",
-				Level.ToString()
+				EffectiveLevel.ToString()
 			));
 
 		if (ItemLevel != 0)
@@ -480,6 +521,7 @@ internal class EquipmentSet {
 		}
 
 		// Combat Stuff
+		//CalculateHPStuff(job, growth);
 		CalculateCritStuff(growth);
 		CalculateDHStuff(growth);
 		CalculateDetStuff(growth);
@@ -499,6 +541,23 @@ internal class EquipmentSet {
 		}
 
 		CalculateSpeedStuff(growth, wantSpell: magicJob);
+	}
+
+	private void CalculateHPStuff(ClassJob job, ParamGrow growth) {
+		// TODO: Figure out why this isn't accurate.
+
+		Attributes.TryGetValue((uint) Stat.VIT, out StatData? stat);
+		bool isTank = job.Role == 1;
+		float scale = isTank ? 34.6f : 24.3f;
+
+		int basevit = Data.GetBaseStatAtLevel(Stat.VIT, EffectiveLevel);
+		int total = stat is null ? basevit : (stat.Value - basevit);
+
+		Calculated.Add(new CalculatedStat(
+			"calc.hp",
+			"HP",
+			(Math.Floor((growth.HpModifier * job.ModifierHitPoints) / 100f) + Math.Floor(total * scale)).ToString("N0")
+		));
 	}
 
 	private void CalculateTenacityStuff(ParamGrow growth) {
@@ -582,7 +641,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.DEF, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.DEF, out int coefficient);
 
-		int total = stat is null ? Data.GetBaseStatAtLevel(Stat.DEF, Level) : stat.Value;
+		int total = stat is null ? Data.GetBaseStatAtLevel(Stat.DEF, EffectiveLevel) : stat.Value;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.def-mitigation",
@@ -595,7 +654,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.MDF, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.MDF, out int coefficient);
 
-		int total = stat is null ? Data.GetBaseStatAtLevel(Stat.MDF, Level) : stat.Value;
+		int total = stat is null ? Data.GetBaseStatAtLevel(Stat.MDF, EffectiveLevel) : stat.Value;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.mdef-mitigation",
@@ -651,21 +710,10 @@ internal class EquipmentSet {
 	/// </summary>
 	private void CalculateBaseStats() {
 
-		/*AddGearStat(null, (uint) Stat.STR);
-		AddGearStat(null, (uint) Stat.DEX);
-		AddGearStat(null, (uint) Stat.VIT);
-		AddGearStat(null, (uint) Stat.INT);
-		AddGearStat(null, (uint) Stat.MND);
-		AddGearStat(null, (uint) Stat.PIE);
-
-		AddGearStat(null, (uint) Stat.SKS);
-		AddGearStat(null, (uint) Stat.SPS);
-		AddGearStat(null, (uint) Stat.TEN);
-		AddGearStat(null, (uint) Stat.PIE);*/
-
-		// First, set all stats based on what level the player is.
+		// First, set all stats based on what level the player is. Use the
+		// EffectiveLevel in case we're simulating a level sync.
 		foreach (var entry in Attributes)
-			entry.Value.Base = Data.GetBaseStatAtLevel((Stat) entry.Key, Level);
+			entry.Value.Base = Data.GetBaseStatAtLevel((Stat) entry.Key, EffectiveLevel);
 
 		// If we have a job, modify the base stats by the job's multipliers.
 		ClassJob? job = EffectiveJobRow();
@@ -733,8 +781,17 @@ internal class EquipmentSet {
 		EmptyMeldSlots = 0;
 		MateriaCount.Clear();
 
+		bool hasOffHand = HasOffhand;
+
+		// If not, Paladins have an off-hand anyways.
+		if (EffectiveClass == 1 || EffectiveClass == 19)
+			hasOffHand = true;
+		// And so do DoH / DoL.
+		else if (EffectiveJobRow() is ClassJob job && job.DohDolJobIndex >= 0)
+			hasOffHand = true;
+
 		// Clear existing stat data.
-		foreach(var stat in Attributes.Values) {
+		foreach (var stat in Attributes.Values) {
 			stat.Gear = 0;
 			stat.Delta = 0;
 			stat.Waste = 0;
@@ -747,8 +804,15 @@ internal class EquipmentSet {
 			stats.Clear();
 
 			ExtendedItem? item = rawItem.Row();
-			ExtendedItemLevel? level = item?.ExtendedItemLevel.Value;
-			if (item is null || level is null)
+			if (item is null)
+				continue;
+
+			bool synced = ILvlSync > 0 && ILvlSync < item.LevelItem.Row && ILvlSync < Data.LevelSheet.RowCount;
+			ExtendedItemLevel? level = synced ?
+				Data.LevelSheet.GetRow(ILvlSync) :
+				item.ExtendedItemLevel.Value;
+
+			if (level is null)
 				continue;
 
 			// Item Level Calculation
@@ -760,7 +824,7 @@ internal class EquipmentSet {
 				// item's ilvl at our current level is lower than its maximum
 				// ilvl, then use that. Never increase the ilvl from this.
 				if (item.SubStatCategory == 2) {
-					ParamGrow? growth = Data.GrowSheet.GetRow(Level);
+					ParamGrow? growth = Data.GrowSheet.GetRow(EffectiveLevel);
 					if (growth is not null && growth.ItemLevelSync < amount)
 						amount = growth.ItemLevelSync;
 				}
@@ -830,15 +894,92 @@ internal class EquipmentSet {
 			// waste values. Then add the waste to the main Attributes.
 			foreach(var stat in stats.Values) {
 				uint statID = stat.ID;
-				ExtendedBaseParam? param = Params[statID];				
+				ExtendedBaseParam? param = Params[statID];
 
-				// As far as I can determine, this is how the game handles
-				// these values. This may be slightly inaccurate.
-				stat.Limit = (int) Math.Round(
-					(level.BaseParam[statID] * param.EquipSlotCategoryPct[item.EquipSlotCategory.Row])
-					/ 1000f,
-					MidpointRounding.AwayFromZero
-				);
+				// If we're synced, we need to calculate the stat limit
+				// for gear of this slot, use that as the limit, and
+				// reduce the gear score if it exceeds the value.
+				if (synced) {
+					if (stat.Gear == 0)
+						stat.Limit = 0;
+					else {
+						ushort factor = item.EquipSlotCategory.Row switch {
+							1 => param.oneHWpnPct,
+							2 => param.OHPct,
+							3 => param.HeadPct,
+							4 => param.ChestPct,
+							5 => param.HandsPct,
+							6 => param.WaistPct,
+							7 => param.LegsPct,
+							8 => param.FeetPct,
+							9 => param.EarringPct,
+							10 => param.NecklacePct,
+							11 => param.BraceletPct,
+							12 => param.RingPct,
+							13 => param.twoHWpnPct,
+							14 => param.oneHWpnPct,
+							15 => param.ChestHeadPct,
+							16 => 0, // Chest Gloves Legs Feet? Probably unknown20
+							17 => 0, // Job Crystal
+							18 => param.LegsFeetPct,
+							19 => param.ChestHeadLegsFeetPct,
+							20 => param.ChestLegsGlovesPct,
+							21 => param.ChestLegsFeetPct,
+							_ => 0,
+						};
+
+						float percentage = factor / 1000f;
+
+						ushort value = statID switch {
+							(int) Stat.STR => level.Strength,
+							(int) Stat.DEX => level.Dexterity,
+							(int) Stat.VIT => level.Vitality,
+							(int) Stat.INT => level.Intelligence,
+							(int) Stat.MND => level.Mind,
+							(int) Stat.PIE => level.Piety,
+							(int) Stat.PhysDMG => level.PhysicalDamage,
+							(int) Stat.MagDMG => level.PhysicalDamage,
+							(int) Stat.TEN => level.Tenacity,
+							(int) Stat.DEF => level.Defense,
+							(int) Stat.MDF => level.MagicDefense,
+							(int) Stat.DH  => level.DirectHitRate,
+							(int) Stat.CRT => level.CriticalHit,
+							(int) Stat.DET => level.Determination,
+							(int) Stat.SKS => level.SkillSpeed,
+							(int) Stat.SPS => level.SpellSpeed,
+							_ => 0,
+						};
+
+						int val = (int) Math.Round(
+							value * percentage,
+							MidpointRounding.AwayFromZero
+						);
+
+						stat.Limit = val;
+						if (stat.Gear > val) {
+							int difference = stat.Gear - val;
+							stat.Gear = val;
+							Attributes[statID].Gear -= difference;
+						} else
+							stat.Limit = stat.Gear;
+					}
+				}
+
+				// If we're *not* synced, calculate the limit.
+				else {
+					// As far as I can determine, this is how the game handles
+					// these values. This may be slightly inaccurate.
+					stat.Limit = (int) Math.Round(
+						(level.BaseParam[statID] * param.EquipSlotCategoryPct[item.EquipSlotCategory.Row])
+						/ 1000f,
+						MidpointRounding.AwayFromZero
+					);
+				}
+
+				// Ensure the limit holds the stats.
+				int min = stat.Base + stat.Gear;
+				if (stat.Limit < min)
+					stat.Limit = min;
 
 				// Now update the waste value, since we have a limit, and add
 				// the waste to the main attribute.
@@ -849,15 +990,8 @@ internal class EquipmentSet {
 
 		int slots = 11;
 		// Is there an off-hand equipped?
-		if (HasOffhand)
+		if (hasOffHand)
 			slots++;
-		// If not, Paladins have an off-hand anyways.
-		else if (EffectiveClass == 1 || EffectiveClass == 19)
-			slots++;
-		// And so do DoH / DoL.
-		else if (EffectiveJobRow() is ClassJob job && job.DohDolJobIndex >= 0)
-			slots++;
-
 
 		// Finally, set the item level.
 		ItemLevel = (ushort) Math.Round(totalLevel / (float) slots, MidpointRounding.AwayFromZero);
