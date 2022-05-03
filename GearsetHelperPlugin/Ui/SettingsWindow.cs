@@ -65,6 +65,13 @@ internal class SettingsWindow {
 				Config.Save();
 			}
 
+			bool hqOnly = Config.FoodHQOnly;
+			if (ImGui.Checkbox(Localization.Localize("gui.settings.food-hq", "Only include HQ food."), ref hqOnly)) {
+				Config.FoodHQOnly = hqOnly;
+				Data.FoodHQOnly = hqOnly;
+				Config.Save();
+			}
+
 			ImGui.TextColored(ImGuiColors.DalamudGrey, Localization.Localize("gui.settings.examine", "Examine Window"));
 
 			ImGui.Indent();

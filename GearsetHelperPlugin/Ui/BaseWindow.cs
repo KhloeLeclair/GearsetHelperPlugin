@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 using Dalamud;
 
+using Dalamud.Game.Text;
+
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -264,7 +266,14 @@ internal abstract class BaseWindow : IDisposable {
 
 		ExtendedItem? selitem = selected?.ItemRow();
 
-		if (ImGui.BeginCombo(label, selitem?.Name ?? Localization.Localize("gui.food.none", "(None)"), ImGuiComboFlags.None)) {
+		string curLabel;
+		string noneLabel = Localization.Localize("gui.food.none", "(None)");
+		if (selitem is not null)
+			curLabel = selected!.HQ ? $"{selitem.Name} {(char) SeIconChar.HighQuality}" : selitem.Name;
+		else
+			curLabel = noneLabel;
+
+		if (ImGui.BeginCombo(label, curLabel, ImGuiComboFlags.None)) {
 			float scroll = ImGui.GetScrollY();
 			float lineHeight = 20 * ImGui.GetIO().FontGlobalScale;
 			float padX = ImGui.GetStyle().FramePadding.X;
@@ -298,7 +307,7 @@ internal abstract class BaseWindow : IDisposable {
 				ImGui.SetCursorPosX(oldPos.X + (size.Y - lineHeight) / 2);
 				ImGui.SetCursorPosY(oldPos.Y + (size.Y - lineHeight) / 2);
 
-				ImGui.Text(Localization.Localize("gui.food.none", "(None)"));
+				ImGui.Text(noneLabel);
 				ImGui.SetCursorPos(newPos);
 			}
 
@@ -314,7 +323,7 @@ internal abstract class BaseWindow : IDisposable {
 					continue;
 
 				bool current = selected == food;
-				ImGui.PushID($"food#{food.ItemID}");
+				ImGui.PushID($"food#{food.ItemID}-{food.HQ}");
 				var oldPos = ImGui.GetCursorPos();
 
 				if (ImGui.Selectable("", current, ImGuiSelectableFlags.None, size)) {
@@ -337,8 +346,11 @@ internal abstract class BaseWindow : IDisposable {
 
 				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y);
-
 				ImGui.Text(item.Name);
+				if (food.HQ) {
+					ImGui.SameLine();
+					ImGui.Text($"{(char) SeIconChar.HighQuality}");
+				}
 				ImGui.SameLine();
 				ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
 
@@ -499,8 +511,13 @@ internal abstract class BaseWindow : IDisposable {
 						CachedSet.UpdateFood(choice);
 					}
 
-					ImGui.SameLine();
-					ImGuiComponents.HelpMarker(Localization.Localize("gui.about-food", "Note: All food is assumed to be high-quality for the purpose of checking stats."));
+					if (SelectedFood is not null) {
+						ImGui.SameLine();
+						ImGui.PushID("food#link");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
+							Ui.Plugin.ChatGui.LinkItem(SelectedFood.ItemRow(), SelectedFood.HQ);
+						ImGui.PopID();
+					}
 				}
 
 				if (SelectedMedicine is not null || CachedSet.RelevantMedicine.Count > 0) {
@@ -512,6 +529,14 @@ internal abstract class BaseWindow : IDisposable {
 					)) {
 						SelectedMedicine = choice;
 						CachedSet.UpdateMedicine(choice);
+					}
+
+					if (SelectedMedicine is not null) {
+						ImGui.SameLine();
+						ImGui.PushID("medicine#link");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
+							Ui.Plugin.ChatGui.LinkItem(SelectedMedicine.ItemRow(), SelectedMedicine.HQ);
+						ImGui.PopID();
 					}
 				}
 			}
@@ -630,7 +655,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 					}
 
-					ImGui.Text(item.Name);
+					ImGui.Text(rawItem.HighQuality ? $"{item.Name} {(char) SeIconChar.HighQuality}" : item.Name);
 					if (ImGui.IsItemClicked())
 						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
 

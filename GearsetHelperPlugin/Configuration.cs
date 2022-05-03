@@ -15,6 +15,8 @@ public class Configuration : IPluginConfiguration
 	public uint FoodMinIlvlDoHL { get; set; } = 200;
 	public uint FoodMinIlvl { get; set; } = 500;
 
+	public bool FoodHQOnly { get; set; } = true;
+
 	public bool CharacterAutoFood { get; set; } = true;
 
 	public bool ExamineOpen { get; set; } = false;

@@ -70,6 +70,7 @@ public class Plugin : IDalamudPlugin
 
 		Data.FoodMinIlvl = Config.FoodMinIlvl;
 		Data.FoodMinIlvlDoHL = Config.FoodMinIlvlDoHL;
+		Data.FoodHQOnly = Config.FoodHQOnly;
 		Data.LoadSheets(DataManager!.Excel);
 		Data.LoadFoodAsync();
 

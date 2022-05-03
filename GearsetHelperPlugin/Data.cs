@@ -87,6 +87,16 @@ internal static class Data {
 		{ Stat.SPS, "SPS" }
 	};
 
+	internal static bool TryGetStat(uint input, [NotNullWhen(true)] out Stat? stat) {
+		if (Enum.TryParse(typeof(Stat), input.ToString(), out object? result) && result is Stat s) {
+			stat = s;
+			return true;
+		}
+
+		stat = null;
+		return false;
+	}
+
 	#endregion
 
 	#region Sheet Access
@@ -135,6 +145,8 @@ internal static class Data {
 	#endregion
 
 	#region Food
+
+	internal static bool FoodHQOnly = false;
 
 	internal static bool IsFoodLoaded => FoodLoaded;
 
@@ -235,7 +247,17 @@ internal static class Data {
 				// Food
 				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
 				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, true);
+					fdata.UpdateStats(food);
+					foodList.Add(fdata);
+				}
+			}
+
+			if (action.Data[0] == 48) {
+				// Food (NQ)
+				ItemFood? food = FoodSheet.GetRow(action.Data[1]);
+				if (food is not null) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, false);
 					fdata.UpdateStats(food);
 					foodList.Add(fdata);
 				}
@@ -245,7 +267,17 @@ internal static class Data {
 				// Medicine
 				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
 				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row);
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, true);
+					fdata.UpdateStats(food);
+					medicineList.Add(fdata);
+				}
+			}
+
+			if (action.Data[0] == 49) {
+				// Medicine (NQ)
+				ItemFood? food = FoodSheet.GetRow(action.Data[1]);
+				if (food is not null) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, false);
 					fdata.UpdateStats(food);
 					medicineList.Add(fdata);
 				}
@@ -294,6 +326,9 @@ internal static class Data {
 		Stat.SPS
 	};
 
+
+	internal static readonly int MAIN_COEFFICIENT = 165;
+	internal static readonly int MAIN_TANK_COEFFICIENT = 156;
 
 	internal static readonly Dictionary<uint, int> COEFFICIENTS = new() {
 		[(int) Stat.CRT] = 200,

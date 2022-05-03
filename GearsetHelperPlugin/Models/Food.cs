@@ -10,7 +10,8 @@ namespace GearsetHelperPlugin.Models;
 internal record Food(
 	uint ItemID,
 	uint FoodID,
-	uint ILvl
+	uint ILvl,
+	bool HQ
 ) {
 
 	public Dictionary<uint, FoodStat> Stats { get; } = new();
@@ -41,14 +42,16 @@ internal record Food(
 			if (param is null)
 				continue;
 
-			float multiplier = entry.IsRelative ? entry.ValueHQ / 100f : 0;
-			short value = entry.IsRelative ? entry.MaxHQ : entry.ValueHQ;
+			sbyte val = HQ ? entry.ValueHQ : entry.Value;
+			short max = HQ ? entry.MaxHQ : entry.Max;
+
+			float multiplier = entry.IsRelative ? val / 100f : 0;
+			short value = entry.IsRelative ? max : val;
 
 			string name;
 			if (
-				Enum.TryParse(typeof(Stat), entry.BaseParam.ToString(), out object? stat) &&
-				stat is Stat st &&
-				Data.ABBREVIATIONS.TryGetValue(st, out string? abbrev) &&
+				Data.TryGetStat(entry.BaseParam, out Stat? st) &&
+				Data.ABBREVIATIONS.TryGetValue(st.Value, out string? abbrev) &&
 				!string.IsNullOrEmpty(abbrev)
 			)
 				name = abbrev;
@@ -65,8 +68,8 @@ internal record Food(
 				StatID: entry.BaseParam,
 				Line: line,
 				Relative: entry.IsRelative,
-				Multiplier: !entry.IsRelative ? 0 : entry.ValueHQ / 100f,
-				MaxValue: !entry.IsRelative ? entry.ValueHQ : entry.MaxHQ
+				Multiplier: multiplier,
+				MaxValue: value
 			);
 		}
 	}

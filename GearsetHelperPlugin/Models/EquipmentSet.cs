@@ -310,6 +310,9 @@ internal class EquipmentSet {
 			if (ilvl < (dohl ? Data.FoodMinIlvlDoHL : Data.FoodMinIlvl))
 				continue;
 
+			if (!food.HQ && Data.FoodHQOnly)
+				continue;
+
 			bool match = false;
 			matches[food] = 0;
 
@@ -340,6 +343,14 @@ internal class EquipmentSet {
 			if (value != 0)
 				return -value;
 
+			value = a.FoodID.CompareTo(b.FoodID);
+			if (value != 0)
+				return -value;
+
+			value = a.HQ.CompareTo(b.HQ);
+			if (value != 0)
+				return -value;
+
 			return 0;
 		});
 	}
@@ -358,6 +369,9 @@ internal class EquipmentSet {
 		foreach (var food in Data.Medicine) {
 			uint ilvl = food.ILvl;
 			if (ilvl < (dohl ? Data.FoodMinIlvlDoHL : Data.FoodMinIlvl))
+				continue;
+
+			if (!food.HQ && Data.FoodHQOnly)
 				continue;
 
 			bool match = false;
@@ -387,6 +401,14 @@ internal class EquipmentSet {
 			matches.TryGetValue(b, out int bMatches);
 
 			value = aMatches.CompareTo(bMatches);
+			if (value != 0)
+				return -value;
+
+			value = a.FoodID.CompareTo(b.FoodID);
+			if (value != 0)
+				return -value;
+
+			value = a.HQ.CompareTo(b.HQ);
 			if (value != 0)
 				return -value;
 
@@ -564,7 +586,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.TEN, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.TEN, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.ten-mitigation",
@@ -583,7 +605,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.PIE, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.PIE, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.pie-tick",
@@ -596,7 +618,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.CRT, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.CRT, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.crit-strength",
@@ -615,7 +637,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.DH, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.DH, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.dh-rate",
@@ -628,7 +650,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue((uint) Stat.DET, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue((uint) Stat.DET, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			"calc.det-multi",
@@ -669,7 +691,7 @@ internal class EquipmentSet {
 		Attributes.TryGetValue(statID, out StatData? stat);
 		Data.COEFFICIENTS.TryGetValue(statID, out int coefficient);
 
-		int total = stat is null ? 0 : stat.Extra;
+		int total = stat is null ? 0 : stat.ExtraFood;
 
 		Calculated.Add(new CalculatedStat(
 			wantSpell ? "calc.sps-multi" : "calc.sks-multi",
@@ -763,7 +785,7 @@ internal class EquipmentSet {
 		ParamGrow? growth = GrowRow();
 		if (growth is not null)
 			foreach (var entry in Attributes)
-				entry.Value.UpdateTiers(growth.LevelModifier);
+				entry.Value.UpdateTiers(growth.LevelModifier, job?.Role == 1);
 	}
 
 	/// <summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 using GearsetHelperPlugin.Sheets;
 
@@ -20,6 +21,7 @@ internal record StatData(
 	public int ValueNoFood => Base + Gear + Delta - Waste;
 	public int Remaining => Math.Max(0, Limit - ValueNoFood);
 	public int Value => ValueNoFood + Food;
+	public int ExtraFood => Extra + Food;
 
 	public int PreviousTier { get; set; }
 	public int NextTier { get; set; }
@@ -31,7 +33,7 @@ internal record StatData(
 			Waste = 0;
 	}
 
-	public void UpdateTiers(int level) {
+	public void UpdateTiers(int level, bool isTank) {
 		// Do we have a coefficient for this stat? If we don't, we can't
 		// calculate tiers.
 		if (!Data.COEFFICIENTS.TryGetValue(ID, out int coefficient))
