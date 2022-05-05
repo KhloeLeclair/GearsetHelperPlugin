@@ -51,8 +51,18 @@ internal abstract class BaseWindow : IDisposable {
 	protected Food? SelectedFood;
 	protected Food? SelectedMedicine;
 
+	private Tuple<string, List<Food>>? FoodFiltered = null;
+	private string FoodFilter = string.Empty;
+	private bool FoodFocused = false;
+
+	private Tuple<string, List<Food>>? MedicineFiltered = null;
+	private string MedicineFilter = string.Empty;
+	private bool MedicineFocused = false;
+
 	private byte SelectedLevelSync = 90;
 	private uint SelectedIlvlSync = 665;
+
+	private float WidestFood = 0;
 
 	private Task<Exporter.ExportResponse>? ExportTask;
 	private Exporter.ExportResponse? ExportResponse;
@@ -113,10 +123,15 @@ internal abstract class BaseWindow : IDisposable {
 
 	protected TextureWrap? GetIcon(uint id, bool hq = false) {
 		if (hq) {
-			if (ItemIcons.TryGetValue(id, out var icon))
+			if (ItemIconsHQ.TryGetValue(id, out var icon))
 				return icon;
 
 			icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
+			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
+				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
+				icon = null;
+			}
+
 			ItemIconsHQ[id] = icon;
 			return icon;
 
@@ -125,6 +140,11 @@ internal abstract class BaseWindow : IDisposable {
 				return icon;
 
 			icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
+			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
+				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
+				icon = null;
+			}
+
 			ItemIcons[id] = icon;
 			return icon;
 		}
@@ -260,7 +280,24 @@ internal abstract class BaseWindow : IDisposable {
 
 	#region Drawing
 
-	protected bool DrawFoodCombo(string label, Food? selected, List<Food> choices, out Food? choice) {
+	private Tuple<string, List<Food>>? FilterFood(List<Food> choices, string filter, Tuple<string, List<Food>>? oldFiltered) {
+		if (oldFiltered is not null && oldFiltered.Item1 == filter)
+			return oldFiltered;
+
+		if (string.IsNullOrWhiteSpace(filter))
+			return null;
+
+		return new(filter, choices.Where(food => {
+			ExtendedItem? item = food.ItemRow();
+			if (item is null)
+				return false;
+
+			return item.Name.ToString().IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) != -1;
+
+		}).ToList());
+	}
+
+	protected bool DrawFoodCombo(string label, Food? selected, List<Food> choices, out Food? choice, ref Tuple<string, List<Food>>? filtered, ref string filter, ref bool focused) {
 		bool result = false;
 		choice = null;
 
@@ -273,19 +310,42 @@ internal abstract class BaseWindow : IDisposable {
 		else
 			curLabel = noneLabel;
 
-		if (ImGui.BeginCombo(label, curLabel, ImGuiComboFlags.None)) {
-			float scroll = ImGui.GetScrollY();
+		if (ImGui.BeginCombo(label, curLabel, ImGuiComboFlags.None | ImGuiComboFlags.HeightLargest)) {
+			ImGui.SetNextItemWidth(-1);
+			ImGui.InputTextWithHint($"##{label}#FoodFilter", "Filter", ref filter, 60);
+			if (!focused)
+				ImGui.SetKeyboardFocusHere();
+
 			float lineHeight = 20 * ImGui.GetIO().FontGlobalScale;
+			WidestFood = Math.Max(WidestFood, ImGui.GetWindowContentRegionWidth());
+
+			ImGui.BeginChild($"###{label}#FoodDisplay", new Vector2(WidestFood, lineHeight * 10), true);
+			if (!focused) {
+				ImGui.SetScrollY(0);
+				focused = true;
+			}
+
+			float scroll = ImGui.GetScrollY();
 			float padX = ImGui.GetStyle().FramePadding.X;
 
 			Vector2 size = new(ImGui.GetWindowContentRegionWidth(), 2 * lineHeight);
 
+			// Filter stuff
+			filtered = FilterFood(choices, filter, filtered);
+			List<Food> visible = filtered?.Item2 ?? choices;
+
 			// Now skip off-screen entries.
 			int start = (int) Math.Floor(scroll / size.Y);
+
+			if (start > visible.Count)
+				start = visible.Count - 4;
 			if (start < 0)
 				start = 0;
 
-			int end = start + 4;
+			int end = start + 5;
+
+			if (end > visible.Count)
+				end = visible.Count;
 
 			if (start > 0)
 				ImGui.Dummy(new Vector2(size.X, size.Y * start));
@@ -298,6 +358,7 @@ internal abstract class BaseWindow : IDisposable {
 				if (ImGui.Selectable("", none_selected, ImGuiSelectableFlags.None, size)) {
 					choice = null;
 					result = true;
+					ImGui.CloseCurrentPopup();
 				}
 				ImGui.PopID();
 				if (none_selected)
@@ -313,11 +374,9 @@ internal abstract class BaseWindow : IDisposable {
 
 			if (start < 1)
 				start = 1;
-			if (end > choices.Count)
-				end = choices.Count;
 
 			for(int i = start - 1; i < end; i++) {
-				Food food = choices[i];
+				Food food = visible[i];
 				ExtendedItem? item = food.ItemRow();
 				if (item is null)
 					continue;
@@ -329,6 +388,7 @@ internal abstract class BaseWindow : IDisposable {
 				if (ImGui.Selectable("", current, ImGuiSelectableFlags.None, size)) {
 					result = true;
 					choice = food;
+					ImGui.CloseCurrentPopup();
 				}
 				ImGui.PopID();
 				if (current)
@@ -337,7 +397,7 @@ internal abstract class BaseWindow : IDisposable {
 				var newPos = ImGui.GetCursorPos();
 				ImGui.SetCursorPos(oldPos);
 
-				var image = GetIcon(item.Icon, true);
+				var image = GetIcon(item.Icon, food.HQ);
 				if (image != null) {
 					ImGui.SetCursorPosX(oldPos.X);
 					ImGui.SetCursorPosY(oldPos.Y + (size.Y - image.Height) / 2);
@@ -357,15 +417,27 @@ internal abstract class BaseWindow : IDisposable {
 				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
 
-				ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine ?? string.Empty);
+				string? stat = food.StatLine;
+				if (stat is not null) {
+					ImGui.TextColored(ImGuiColors.DalamudGrey, food.StatLine);
+					ImGui.SameLine();
+					WidestFood = Math.Max(WidestFood, (image?.Width ?? 0) + 2 * padX + ImGui.CalcTextSize(food.StatLine).X);
+				}
 
 				ImGui.SetCursorPos(newPos);
 			}
 
 			if (end < choices.Count)
-				ImGui.Dummy(new Vector2(size.X, size.Y * (choices.Count - end)));
+				ImGui.Dummy(new Vector2(size.X, size.Y * (visible.Count - end)));
+
+			ImGui.EndChild();
+			//if (!isFocused)
+			//	ImGui.CloseCurrentPopup();
 
 			ImGui.EndCombo();
+		} else if (focused) {
+			focused = false;
+			filter = string.Empty;
 		}
 
 		return result;
@@ -505,7 +577,10 @@ internal abstract class BaseWindow : IDisposable {
 						Localization.Localize("gui.food", "Food"),
 						SelectedFood,
 						CachedSet.RelevantFood,
-						out Food? choice
+						out Food? choice,
+						ref FoodFiltered,
+						ref FoodFilter,
+						ref FoodFocused
 					)) {
 						SelectedFood = choice;
 						CachedSet.UpdateFood(choice);
@@ -525,7 +600,10 @@ internal abstract class BaseWindow : IDisposable {
 						Localization.Localize("gui.medicine", "Medicine"),
 						SelectedMedicine,
 						CachedSet.RelevantMedicine,
-						out Food? choice
+						out Food? choice,
+						ref MedicineFiltered,
+						ref MedicineFilter,
+						ref MedicineFocused
 					)) {
 						SelectedMedicine = choice;
 						CachedSet.UpdateMedicine(choice);
@@ -608,8 +686,6 @@ internal abstract class BaseWindow : IDisposable {
 
 						if (icon != null) {
 							ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
-							if (ImGui.IsItemClicked())
-								Ui.Plugin.ChatGui.LinkItem(item, false);
 							ImGui.SameLine();
 							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						}
@@ -618,8 +694,12 @@ internal abstract class BaseWindow : IDisposable {
 							ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.empty-slots", "(Empty Slots)"));
 						else {
 							ImGui.Text(item.Name);
-							if (ImGui.IsItemClicked())
+
+							ImGui.SameLine(ImGui.GetColumnWidth() - 30);
+							ImGui.PushID($"materia#link#{item.RowId}");
+							if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
 								Ui.Plugin.ChatGui.LinkItem(item, false);
+							ImGui.PopID();
 						}
 					}
 					ImGui.EndTable();
@@ -648,21 +728,23 @@ internal abstract class BaseWindow : IDisposable {
 					int height = icon is null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 					if (icon != null) {
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
-						if (ImGui.IsItemClicked())
-							Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
-
 						ImGui.SameLine();
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 					}
 
 					ImGui.Text(rawItem.HighQuality ? $"{item.Name} {(char) SeIconChar.HighQuality}" : item.Name);
-					if (ImGui.IsItemClicked())
-						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
 
 					if (CachedSet.ILvlSync > 0 && item.LevelItem.Row > CachedSet.ILvlSync) {
 						ImGui.SameLine();
 						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
 					}
+
+					ImGui.SameLine(ImGui.GetWindowContentRegionWidth() - 30);
+
+					ImGui.PushID($"item#link#{rawItem.ID}");
+					if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
+						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
+					ImGui.PopID();
 
 					if (stats is not null && stats.Count > 0)
 						DrawStatTable(stats.Values, CachedSet.Params, false, true);
