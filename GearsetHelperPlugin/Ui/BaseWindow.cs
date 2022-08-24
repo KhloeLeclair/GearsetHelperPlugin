@@ -317,7 +317,7 @@ internal abstract class BaseWindow : IDisposable {
 				ImGui.SetKeyboardFocusHere();
 
 			float lineHeight = 20 * ImGui.GetIO().FontGlobalScale;
-			WidestFood = Math.Max(WidestFood, ImGui.GetWindowContentRegionWidth());
+			WidestFood = Math.Max(WidestFood, ImGui.GetWindowContentRegionMin().X);
 
 			ImGui.BeginChild($"###{label}#FoodDisplay", new Vector2(WidestFood, lineHeight * 10), true);
 			if (!focused) {
@@ -328,7 +328,7 @@ internal abstract class BaseWindow : IDisposable {
 			float scroll = ImGui.GetScrollY();
 			float padX = ImGui.GetStyle().FramePadding.X;
 
-			Vector2 size = new(ImGui.GetWindowContentRegionWidth(), 2 * lineHeight);
+			Vector2 size = new(ImGui.GetWindowContentRegionMax().X, 2 * lineHeight);
 
 			// Filter stuff
 			filtered = FilterFood(choices, filter, filtered);
@@ -739,7 +739,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
 					}
 
-					ImGui.SameLine(ImGui.GetWindowContentRegionWidth() - 30);
+					ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 30);
 
 					ImGui.PushID($"item#link#{rawItem.ID}");
 					if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))

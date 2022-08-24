@@ -13,8 +13,8 @@ public class ExtendedItem : Item {
 	public LazyRow<ExtendedItemLevel> ExtendedItemLevel { get; set; }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-	public UnkData59Obj[] BaseParam => UnkData59;
-	public UnkData73Obj[] BaseParamSpecial => UnkData73;
+	public ItemUnkData59Obj[] BaseParam => UnkData59;
+	public ItemUnkData73Obj[] BaseParamSpecial => UnkData73;
 
 	public override void PopulateData(RowParser parser, GameData gameData, Language language) {
 		base.PopulateData(parser, gameData, language);

@@ -238,7 +238,7 @@ internal class EquipmentSet {
 				if (slot.MainHand == 1)
 					category = data.ExtendedClassJobCategory.Value;
 				if (slot.OffHand == 1) {
-					PluginLog.Log($"Off-hand: {data.Name}");
+					//PluginLog.Log($"Off-hand: {data.Name}");
 					HasOffhand = true;
 				}
 				if (slot.SoulCrystal == 1)

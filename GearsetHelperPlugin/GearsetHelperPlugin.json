@@ -12,5 +12,10 @@
 		"examine",
 		"etro",
 		"ariyala"
+	],
+	"ImageUrls": [
+		"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image1.png",
+		"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image2.png",
+		"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image3.png"
 	]
 }
