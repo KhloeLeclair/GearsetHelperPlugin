@@ -24,7 +24,7 @@ internal class GameFunctions : IDisposable {
 
 		var erPtr = Plugin.SigScanner.ScanText("48 89 5C 24 ?? 57 48 83 EC 20 49 8B D8 48 8B F9 4D 85 C0 0F 84 ?? ?? ?? ?? 85 D2");
 		_examineRefreshHook = Hook<ExamineRefreshedDelegate>.FromAddress(erPtr, ExamineRefreshed); // new Hook<ExamineRefreshedDelegate>(erPtr, ExamineRefreshed);
-		_examineRefreshHook.Enable();
+		_examineRefreshHook?.Enable();
 	}
 
 	public void Dispose() {
