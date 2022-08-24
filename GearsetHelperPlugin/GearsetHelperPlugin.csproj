@@ -62,4 +62,12 @@
     </Reference>
   </ItemGroup>
 
+  <Target Name="PackagePlugin" AfterTargets="Build">
+    <DalamudPackager
+        ProjectDir="$(ProjectDir)"
+        OutputPath="$(OutputPath)"
+        AssemblyName="$(AssemblyName)"
+    />
+  </Target>
+
 </Project>
