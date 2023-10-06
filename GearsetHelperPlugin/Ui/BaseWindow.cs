@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Text;
 using System.Threading.Tasks;
 
 using Dalamud;
@@ -12,11 +11,13 @@ using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Internal;
+using Dalamud.Interface.Utility;
+using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 using ImGuiNET;
-using ImGuiScene;
 
 using Lumina.Excel.GeneratedSheets;
 
@@ -44,8 +45,8 @@ internal abstract class BaseWindow : IDisposable {
 	protected PluginUI Ui { get; }
 	protected abstract string Name { get; }
 
-	private readonly Dictionary<uint, TextureWrap?> ItemIcons = new();
-	private readonly Dictionary<uint, TextureWrap?> ItemIconsHQ = new();
+	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIcons = new();
+	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIconsHQ = new();
 
 	protected EquipmentSet? CachedSet;
 	protected Food? SelectedFood;
@@ -115,18 +116,18 @@ internal abstract class BaseWindow : IDisposable {
 
 	#region Icons
 
-	protected TextureWrap? GetIcon(Item? item, bool hq = false) {
+	protected IDalamudTextureWrap? GetIcon(Item? item, bool hq = false) {
 		if (item is not null)
 			return GetIcon(item.Icon, hq);
 		return null;
 	}
 
-	protected TextureWrap? GetIcon(uint id, bool hq = false) {
+	protected IDalamudTextureWrap? GetIcon(uint id, bool hq = false) {
 		if (hq) {
 			if (ItemIconsHQ.TryGetValue(id, out var icon))
 				return icon;
 
-			icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
+			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.ItemHighQuality);
 			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
 				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
 				icon = null;
@@ -139,7 +140,7 @@ internal abstract class BaseWindow : IDisposable {
 			if (ItemIcons.TryGetValue(id, out var icon))
 				return icon;
 
-			icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
+			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.None);
 			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
 				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
 				icon = null;
@@ -672,7 +673,7 @@ internal abstract class BaseWindow : IDisposable {
 						ExtendedItem? item = entry.Item1;
 						ImGui.TableNextRow();
 
-						TextureWrap? icon = GetIcon(item);
+						IDalamudTextureWrap? icon = GetIcon(item);
 						int height = icon == null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 
 						ImGui.TableSetColumnIndex(0);
@@ -724,7 +725,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.Spacing();
 					}
 
-					TextureWrap? icon = GetIcon(item, rawItem.HighQuality);
+					IDalamudTextureWrap? icon = GetIcon(item, rawItem.HighQuality);
 					int height = icon is null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 					if (icon != null) {
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));

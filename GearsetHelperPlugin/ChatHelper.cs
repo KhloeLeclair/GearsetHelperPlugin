@@ -1,8 +1,7 @@
-using Dalamud.Game.Gui;
-
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
+using Dalamud.Plugin.Services;
 
 using GearsetHelperPlugin.Sheets;
 
@@ -10,7 +9,7 @@ namespace GearsetHelperPlugin;
 
 internal static class ChatHelper {
 
-	internal static void LinkItem(this ChatGui chat, ExtendedItem? item, bool highQuality = true) {
+	internal static void LinkItem(this IChatGui chat, ExtendedItem? item, bool highQuality = true) {
 		if (item is null)
 			return;
 
@@ -28,7 +27,7 @@ internal static class ChatHelper {
 			new RawPayload(new byte[] {0x02, 0x13, 0x02, 0xEC, 0x03})
 		});
 
-		chat.PrintChat(new XivChatEntry {
+		chat.Print(new XivChatEntry {
 			Message = result,
 			Type = XivChatType.Echo
 		});

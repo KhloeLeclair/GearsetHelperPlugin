@@ -228,7 +228,7 @@ internal static class Data {
 		});
 	}
 
-	private static void LoadFood(List<Food> foodList, List<Food> medicineList) { 
+	private static void LoadFood(List<Food> foodList, List<Food> medicineList) {
 		if (!CheckSheets())
 			return;
 

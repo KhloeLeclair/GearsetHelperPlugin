@@ -1,14 +1,10 @@
 using System.IO;
 
 using Dalamud;
-using Dalamud.Data;
 using Dalamud.Game;
-using Dalamud.Game.ClientState.Objects;
-using Dalamud.Game.ClientState;
-using Dalamud.Game.Command;
-using Dalamud.Game.Gui;
 using Dalamud.IoC;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 
 using GearsetHelperPlugin.Sheets;
 
@@ -23,28 +19,37 @@ public class Plugin : IDalamudPlugin
 	internal DalamudPluginInterface Interface { get; init; }
 
 	[PluginService]
-	internal ChatGui ChatGui { get; init; }
+	internal IChatGui ChatGui { get; init; }
 
 	[PluginService]
-	internal ClientState ClientState { get; init; }
+	internal IClientState ClientState { get; init; }
 
 	[PluginService]
-	internal CommandManager CommandManager { get; init; }
+	internal ICommandManager CommandManager { get; init; }
 
 	[PluginService]
-	internal DataManager DataManager { get; init; }
+	internal IDataManager DataManager { get; init; }
 
 	[PluginService]
-	internal Framework Framework { get; init; }
+	internal IFramework Framework { get; init; }
 
 	[PluginService]
-	internal GameGui GameGui { get; init; }
+	internal IGameGui GameGui { get; init; }
 
 	[PluginService]
-	internal ObjectTable ObjectTable { get; init; }
+	internal IObjectTable ObjectTable { get; init; }
 
 	[PluginService]
-	internal SigScanner SigScanner { get; init; }
+	internal ISigScanner SigScanner { get; init; }
+
+	[PluginService]
+	internal IGameInteropProvider GameInteropProvider { get; init; }
+
+	[PluginService]
+	internal IPluginLog PluginLog { get; init; }
+
+	[PluginService]
+	internal ITextureProvider TextureProvider { get; init; }
 
 	internal GameFunctions Functions { get; }
 
