@@ -2,26 +2,33 @@
 	{
 		"Author": "Khloe Leclair",
 		"Name": "Gearset Helper Plugin",
-		"Description": "Displays extra information about a character's gearsets when Examine is open, and makes it easy to export gearsets to Etro or Ariyala.",
 		"InternalName": "GearsetHelperPlugin",
-		"AssemblyVersion": "1.5.0.0",
-		"TestingAssemblyVersion": "1.5.0.0",
-		"RepoUrl": "https://github.com/KhloeLeclair/GearsetHelperPlugin",
+		"AssemblyVersion": "2.0.0.0",
+		"Description": "Displays extra information about a character's gearsets when Examine is open, and makes it easy to export gearsets to Etro or Ariyala.",
 		"ApplicableVersion": "any",
-		"DalamudApiLevel": 6,
-		"IsHide": "False",
-		"IsTestingExclusive": "True",
-		"DownloadCount": 0,
-		"LastUpdate": 0,
+		"RepoUrl": "https://github.com/KhloeLeclair/GearsetHelperPlugin",
+		"Tags": [
+			"UI",
+			"gearset",
+			"examine",
+			"etro",
+			"ariyala"
+		],
+		"DalamudApiLevel": 9,
+		"LoadRequiredState": 0,
+		"LoadSync": false,
+		"CanUnloadAsync": false,
 		"LoadPriority": 0,
-		"DownloadLinkInstall": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.5.0.0/latest.zip",
-		"DownloadLinkTesting": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.5.0.0/latest.zip",
-		"DownloadLinkUpdate": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/1.5.0.0/latest.zip",
+		"DownloadLinkInstall": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/2.0.0.0/latest.zip",
+		"DownloadLinkUpdate": "https://github.com/KhloeLeclair/GearsetHelperPlugin/releases/download/2.0.0.0/latest.zip",
 		"IconUrl": "https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/icon.png",
 		"ImageUrls": [
-			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image1.png",
-			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image2.png",
-			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image3.png"
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image1-cropped.png",
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image2-cropped.png",
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image3.png",
+			"https://raw.githubusercontent.com/KhloeLeclair/GearsetHelperPlugin/main/images/image4.png"
 		],
+		"Punchline": "Display estimated stats with Examine, and export gear to Etro/Ariyala.",
+		"AcceptsFeedback": true
 	}
 ]
