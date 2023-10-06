@@ -1,13 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Globalization;
 
-using Dalamud.Logging;
-
-using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
 using GearsetHelperPlugin.Sheets;
 
@@ -50,6 +44,11 @@ internal class EquipmentSet {
 	public uint ILvlSync { get; set; }
 
 	/// <summary>
+	/// The percentage stats should be modified due to group bonus.
+	/// </summary>
+	public float GroupBonus { get; set; } = 1f;
+
+	/// <summary>
 	/// Food to apply to the stats.
 	/// </summary>
 	public Food? Food { get; set; }
@@ -58,7 +57,6 @@ internal class EquipmentSet {
 	/// Medicine to apply to the stats.
 	/// </summary>
 	public Food? Medicine { get; set; }
-
 
 	/// <summary>
 	/// Whether or not this equipment set includes a soul crystal.
@@ -88,6 +86,8 @@ internal class EquipmentSet {
 	public Dictionary<uint, StatData> Attributes { get; } = new();
 	public List<Dictionary<uint, StatData>> ItemAttributes { get; } = new();
 
+	public StatData? WeaponDamage { get; private set; } = null;
+
 	#endregion
 
 	#region Calculated Stats
@@ -109,6 +109,12 @@ internal class EquipmentSet {
 	public int EmptyMeldSlots { get; set; }
 
 	public Dictionary<uint, int> MateriaCount { get; } = new();
+
+	#endregion
+
+	#region That's A Lotta Damage
+
+	public Dictionary<int, DamageValues> DamageValues { get; } = new();
 
 	#endregion
 
@@ -181,6 +187,16 @@ internal class EquipmentSet {
 		Level = level;
 
 		return changed;
+	}
+
+	internal bool UpdateGroupBonus(uint groupBonus) {
+		float value = groupBonus / 100f;
+
+		if (value == GroupBonus)
+			return false;
+
+		GroupBonus = value;
+		return true;
 	}
 
 	internal bool UpdateSync(byte levelSync, uint ilvlSync) {
@@ -450,10 +466,10 @@ internal class EquipmentSet {
 		}
 	}
 
-	public void UpdateFood(uint foodId, bool update = true) {
+	public void UpdateFood(uint foodId, bool hq = false, bool update = true) {
 		Food? food = null;
 		foreach(var fd in Data.Food) {
-			if (fd.FoodID == foodId) {
+			if (fd.FoodID == foodId && fd.HQ == hq) {
 				food = fd;
 				break;
 			}
@@ -543,7 +559,8 @@ internal class EquipmentSet {
 		}
 
 		// Combat Stuff
-		//CalculateHPStuff(job, growth);
+		CalculateHPStuff(job, growth);
+		CalculateWeaponDamage(job, growth);
 		CalculateCritStuff(growth);
 		CalculateDHStuff(growth);
 		CalculateDetStuff(growth);
@@ -565,8 +582,166 @@ internal class EquipmentSet {
 		CalculateSpeedStuff(growth, wantSpell: magicJob);
 	}
 
+	private void CalculateWeaponDamage(ClassJob job, ParamGrow growth) {
+
+		if ( WeaponDamage is null || job is null )
+			return;
+
+		// First, we need to calculate the weapon damage multiplier.
+
+		// To do this, we need to know what the job's primary stat is
+		// and get its base value at level.
+		Stat primaryStat = (Stat) job.PrimaryStat;
+		int baseValue = Data.GetBaseStatAtLevel(primaryStat, EffectiveLevel);
+
+		// Now we need to get the mod.
+		int jobMod = primaryStat switch {
+			Stat.STR => job.ModifierStrength,
+			Stat.DEX => job.ModifierDexterity,
+			Stat.VIT => job.ModifierVitality,
+			Stat.INT => job.ModifierIntelligence,
+			Stat.MND => job.ModifierMind,
+			Stat.PIE => job.ModifierPiety,
+			_ => -100
+		};
+
+		// Invalid value, return~
+		if (jobMod == -100)
+			return;
+
+		// Now, we need to calculate a lot of stuff.
+
+		// ====================================================================
+		// 1. The weapon damage multiplier.
+		// ====================================================================
+		float dmgMulti = (WeaponDamage.Value + MathF.Floor((baseValue * jobMod) / 1000f)) / 100f;
+
+		// ====================================================================
+		// 2. A critical damage multiplier.
+		// ====================================================================
+		float critMulti, critRate;
+		{
+			Attributes.TryGetValue((uint) Stat.CRT, out StatData? stat);
+			Data.COEFFICIENTS.TryGetValue((uint) Stat.CRT, out int coefficient);
+
+			int total = stat is null ? 0 : stat.ExtraFood;
+
+			// Calculate the Critical Hit Multiplier (Percentage in Range: 0..1 (can exceed 1))
+			critMulti = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 1400f) / 1000f;
+			// Calculate the Critical Hit Rate (Percentage in Range: 0..1)
+			critRate = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 50f) / 1000f;
+		}
+
+		// ====================================================================
+		// 3. Main Stat Multiplier
+		// ====================================================================
+		float mainMulti;
+		{
+			bool isTank = job.Role == 1;
+
+			Attributes.TryGetValue((uint) primaryStat, out StatData? stat);
+
+			float scalar = isTank
+				? Data.GetTankAttackScalar(EffectiveLevel)
+				: Data.GetAttackScalar(EffectiveLevel);
+
+			mainMulti = (100f + MathF.Floor((((stat?.Value ?? baseValue) - baseValue) * scalar) / (float) baseValue)) / 100f;
+		}
+
+		// ====================================================================
+		// 4. A determination multiplier.
+		// ====================================================================
+		float detMulti;
+		{
+			Attributes.TryGetValue((uint) Stat.DET, out StatData? stat);
+			Data.COEFFICIENTS.TryGetValue((uint) Stat.DET, out int coefficient);
+
+			int total = stat is null ? 0 : stat.ExtraFood;
+
+			detMulti = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 1000f) / 1000f;
+		}
+
+		// ====================================================================
+		// 5. A direct hit multiplier.
+		// ====================================================================
+		float dhMulti, dhRate;
+		{
+			Attributes.TryGetValue((uint) Stat.DH, out StatData? stat);
+			Data.COEFFICIENTS.TryGetValue((uint) Stat.DH, out int coefficient);
+
+			int total = stat is null ? 0 : stat.ExtraFood;
+
+			// Calculate the Direct Hit Rate (Percentage in Range: 0..1)
+			dhRate = MathF.Floor(coefficient * (float) total / growth.LevelModifier) / 1000f;
+			dhMulti = 1.25f;
+		}
+
+		// ====================================================================
+		// 6. A tenacity multiplier.
+		// ====================================================================
+		float tenMulti;
+		{
+			Attributes.TryGetValue((uint) Stat.TEN, out StatData? stat);
+			Data.COEFFICIENTS.TryGetValue((uint) Stat.TEN, out int coefficient);
+
+			int total = stat is null ? 0 : stat.ExtraFood;
+
+			tenMulti = (1000f + MathF.Floor(coefficient * (float) total / growth.LevelModifier)) / 1000f;
+		}
+
+		// ====================================================================
+		// 7. Any extra job-related or buff-related multipliers.
+		// ====================================================================
+		float extra = Data.GetTraitModifier(job.ToGameClass(), EffectiveLevel);
+
+		// Calculate useful values for the average column.
+		float avgCritMulti = 1f + critRate * (critMulti - 1f);
+		float avgDhMulti = 1f + dhRate * (dhMulti - 1f);
+
+		// Now build the data.
+		DamageValues.Clear();
+
+		//PluginLog.Debug($"Source Values: dmg={dmgMulti}, main={mainMulti}, critM={critMulti} critR={critRate}, crit={avgCritMulti}, det={detMulti}, dh={dhMulti}, ten={tenMulti}, ext={extra}");
+
+		foreach(int potency in Data.GetExamplePotencies(job.ToGameClass(), EffectiveLevel)) { 
+			float expected = MathF.Round(
+				potency * dmgMulti * mainMulti * avgCritMulti * detMulti * avgDhMulti * tenMulti * extra,
+				MidpointRounding.ToZero
+			);
+
+			float expectNormal = MathF.Round(
+				potency * dmgMulti * mainMulti * detMulti * tenMulti * extra,
+				MidpointRounding.ToZero
+			);
+
+			float expectCrit = MathF.Round(
+				potency * dmgMulti * mainMulti * critMulti * detMulti * tenMulti * extra,
+				MidpointRounding.ToZero
+			);
+
+			float expectDH = MathF.Round(
+				potency * dmgMulti * mainMulti * dhMulti * detMulti * tenMulti * extra,
+				MidpointRounding.ToZero
+			);
+
+			float expectWhoa = MathF.Round(
+				potency * dmgMulti * mainMulti * critMulti * dhMulti * detMulti * tenMulti * extra,
+				MidpointRounding.ToZero
+			);
+
+			DamageValues.Add(potency, new(expectNormal, expected, expectCrit, expectDH, expectWhoa));
+		}
+
+		//PluginLog.Debug($"Values={DamageValues}");
+	}
+
 	private void CalculateHPStuff(ClassJob job, ParamGrow growth) {
-		// TODO: Figure out why this isn't accurate.
+		// TODO: Figure out why the base game values aren't accurate.
+		int hp;
+		if (EffectiveLevel == 90)
+			hp = 3000;
+		else
+			return;
 
 		Attributes.TryGetValue((uint) Stat.VIT, out StatData? stat);
 		bool isTank = job.Role == 1;
@@ -575,10 +750,17 @@ internal class EquipmentSet {
 		int basevit = Data.GetBaseStatAtLevel(Stat.VIT, EffectiveLevel);
 		int total = stat is null ? basevit : (stat.Value - basevit);
 
+		/*PluginLog.Log($"HP: {hp}");
+		PluginLog.Log($"HP Modifier: {growth.HpModifier}");
+		PluginLog.Log($"Modifer HP: {job.ModifierHitPoints}");
+		PluginLog.Log($"Base Vit: {basevit}");
+		PluginLog.Log($"Total Vit: {stat?.Value ?? basevit}");
+		PluginLog.Log($"Scale: {isTank} -- {scale}");*/
+
 		Calculated.Add(new CalculatedStat(
 			"calc.hp",
 			"HP",
-			(Math.Floor((growth.HpModifier * job.ModifierHitPoints) / 100f) + Math.Floor(total * scale)).ToString("N0")
+			(Math.Floor((/*growth.HpModifier*/hp * job.ModifierHitPoints) / 100f) + Math.Floor(total * scale)).ToString("N0")
 		));
 	}
 
@@ -685,6 +867,32 @@ internal class EquipmentSet {
 		));
 	}
 
+	private static double CalculateGCD(int coefficient, int extra, int levelModifier, int modifier = 0, int haste = 0) {
+		return Math.Floor(
+			Math.Floor(
+				Math.Floor(
+					Math.Floor((1000.0 - Math.Floor(coefficient * (double) extra / levelModifier)) * 2500.0 / 1000.0) *
+					Math.Floor(
+						(
+							Math.Floor(
+								Math.Floor((100.0 - /*arrow*/ 0) * (100.0 - modifier) / 100.0) *
+								(100.0 - haste) / 100.0
+							) -
+							/*feyWind*/ 0
+						) *
+						(/*selfBuff2*/0 - 100.0) /
+						100.0
+					) /
+					-100.0
+				) *
+				/*RoF*/ 100.0 /
+				1000.0
+			) *
+			/*umbralAstral3*/100.0 /
+			100.0
+		) / 100.0;
+	}
+
 	private void CalculateSpeedStuff(ParamGrow growth, bool wantSpell) {
 		uint statID = (uint) (wantSpell ? Stat.SPS : Stat.SKS);
 
@@ -699,11 +907,56 @@ internal class EquipmentSet {
 			((Math.Floor(coefficient * (float) total / growth.LevelModifier) + 1000) / 1000f).ToString("P1")
 		));
 
+		// Old, simplified math.
+		//double gcd = Math.Floor(2500 * (Math.Ceiling(coefficient * (float) -total / growth.LevelModifier) + 1000) / 10000f) / 100f;
+
+		double gcd = CalculateGCD(coefficient, total, growth.LevelModifier, 0);
+
 		Calculated.Add(new CalculatedStat(
 			"calc.gcd",
 			"Global Cooldown",
-			(Math.Floor(2500 * (Math.Ceiling(coefficient * (float) -total / growth.LevelModifier) + 1000) / 10000f) / 100f).ToString("N2")
+			gcd.ToString("N2")
 		));
+
+		// Monk Check
+		if (EffectiveClass == 2 || EffectiveClass == 20) {
+			// Greased Lightning
+			//       Lv  1:   GL: 5%
+			//       Lv 20:  EGL: 10%
+			// (JOB) Lv 40: EGL2: 15%
+			// (JOB) Lv 76: EGL3: 20%
+			bool monk = EffectiveClass == 20;
+			int modifier = 5;
+
+			if (monk && EffectiveLevel >= 76)
+				modifier = 20;
+			else if (monk && EffectiveLevel >= 40)
+				modifier = 15;
+			else if (EffectiveLevel >= 20)
+				modifier = 10;
+
+			gcd = CalculateGCD(coefficient, total, growth.LevelModifier, modifier);
+
+			Calculated.Add(new CalculatedStat(
+				"calc.gcd-gl",
+				"Global Cooldown (GL)",
+				gcd.ToString("N2")
+			));
+		}
+
+		// Ninja Check
+		if (EffectiveClass == 30) {
+			// Hyoton: 15%
+			gcd = CalculateGCD(coefficient, total, growth.LevelModifier, 15);
+
+			Calculated.Add(new CalculatedStat(
+				"calc.gcd-hu",
+				"Global Cooldown (Huton)",
+				gcd.ToString("N2")
+			));
+		}
+
+
 	}
 
 	/// <summary>
@@ -781,6 +1034,16 @@ internal class EquipmentSet {
 				}
 			}
 
+		// Apply the group bonus.
+		foreach(var entry in Attributes) {
+			Stat key = (Stat) entry.Key;
+			entry.Value.GroupBonus = 0;
+			if ( GroupBonus != 0f && (key == Stat.STR || key == Stat.DEX || key == Stat.VIT || key == Stat.INT || key == Stat.MND) ) {
+				int bonus = (int) MathF.Floor(entry.Value.Value * GroupBonus);
+				entry.Value.GroupBonus = bonus;
+			}
+		}
+
 		// Finally, calculate tiers.
 		ParamGrow? growth = GrowRow();
 		if (growth is not null)
@@ -819,6 +1082,9 @@ internal class EquipmentSet {
 			stat.Waste = 0;
 		}
 
+		// Clear existing weapon damage too.
+		WeaponDamage = null;
+
 		// Loop through all the items.
 		for (int i = 0; i < Items.Count; i++) {
 			MeldedItem rawItem = Items[i];
@@ -855,6 +1121,83 @@ internal class EquipmentSet {
 			}
 
 			// Stat Calculation
+
+			// Weapon Stats
+			if ( slot is not null && slot.MainHand == 1) {
+				// Determine what kind of weapon damage we've got.
+				bool want_magic = EffectiveClass == 129 || item.DamageMag >= item.DamagePhys;
+
+				WeaponDamage = new StatData((uint) (want_magic ? Stat.MagDMG : Stat.PhysDMG)) {
+					Gear = want_magic ? item.DamageMag : item.DamagePhys
+				};
+
+				// Handle High-Quality
+				if ( rawItem.HighQuality ) {
+					foreach(var entry in item.BaseParamSpecial) {
+						uint statID = entry.BaseParamSpecial;
+						if (statID == WeaponDamage.ID)
+							WeaponDamage.Gear += entry.BaseParamValueSpecial;
+					}
+				}
+
+				// Handle limits too.
+				uint sid = WeaponDamage.ID;
+				if (! Params.TryGetValue(sid, out var param)) {
+					param = Data.ParamSheet?.GetRow(sid);
+					if (param is not null)
+						Params[sid] = param;
+				}
+
+				if (param is not null) {
+					if (synced) {
+						ushort factor = item.EquipSlotCategory.Row switch {
+							1 => param.oneHWpnPct,
+							2 => param.OHPct,
+							13 => param.twoHWpnPct,
+							14 => param.oneHWpnPct,
+							_ => 0,
+						};
+
+						float percentage = factor / 1000f;
+
+						ushort value = sid switch {
+							(int) Stat.PhysDMG => level.PhysicalDamage,
+							(int) Stat.MagDMG => level.MagicalDamage,
+							_ => 0,
+						};
+
+						int val = (int) Math.Round(
+							value * percentage,
+							MidpointRounding.AwayFromZero
+						);
+
+						WeaponDamage.Limit = val;
+						if (WeaponDamage.Gear > val) {
+							int difference = WeaponDamage.Gear - val;
+							WeaponDamage.Gear = val;
+						} else
+							WeaponDamage.Limit = WeaponDamage.Gear;
+
+					} else {
+						// As far as I can determine, this is how the game handles
+						// these values. This may be slightly inaccurate.
+						WeaponDamage.Limit = (int) Math.Round(
+							(level.BaseParam[sid] * param.EquipSlotCategoryPct[item.EquipSlotCategory.Row])
+							/ 1000f,
+							MidpointRounding.AwayFromZero
+						);
+					}
+				}
+
+				// Ensure the limit holds the stats.
+				int min = WeaponDamage.Base + WeaponDamage.Gear;
+				if (WeaponDamage.Limit < min)
+					WeaponDamage.Limit = min;
+
+				// Now update the waste value, since we have a limit, and add
+				// the waste to the main attribute.
+				WeaponDamage.UpdateWaste();
+			}
 
 			// Base Item Stats
 			if (item.DamagePhys > 0)
@@ -1016,7 +1359,7 @@ internal class EquipmentSet {
 			slots++;
 
 		// Finally, set the item level.
-		ItemLevel = (ushort) Math.Round(totalLevel / (float) slots, MidpointRounding.AwayFromZero);
+		ItemLevel = (ushort) Math.Round(totalLevel / (float) slots, MidpointRounding.ToZero);
 	}
 
 	/// <summary>

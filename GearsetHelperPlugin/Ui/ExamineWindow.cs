@@ -12,6 +12,8 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using GearsetHelperPlugin.Models;
 
+using DStatus = Dalamud.Game.ClientState.Statuses.Status;
+
 namespace GearsetHelperPlugin.Ui;
 
 internal class ExamineWindow : BaseWindow {
@@ -39,6 +41,9 @@ internal class ExamineWindow : BaseWindow {
 	protected override void OnVisibleChange() {
 		Ui.Plugin.Config.ExamineOpen = Visible;
 		Ui.Plugin.Config.Save();
+
+		if (Visible && Ui.Plugin.Config.CharacterAutoFood && CachedSet is not null)
+			UpdateFoodData();
 	}
 
 	internal unsafe void Draw() {
@@ -79,6 +84,33 @@ internal class ExamineWindow : BaseWindow {
 		return examineLoadStage >= 4;
 	}
 
+	protected void UpdateFoodData(EquipmentSet? set = null, PlayerCharacter? player = null, bool update = true) {
+		set ??= CachedSet;
+		if (set is null)
+			return;
+
+		player ??= GetActor();
+		if (player is null)
+			return;
+
+		var statuses = GetStatuses(player);
+		if (statuses is not null)
+			foreach (var status in statuses) {
+				if (status.StatusId == 48) {
+					bool hq = false;
+					uint foodId = status.Param;
+					if (foodId >= 10000) {
+						hq = true;
+						foodId -= 10000;
+					}
+
+					set.UpdateFood(foodId, hq, update);
+					SelectedFood = set.Food;
+					break;
+				}
+			}
+	}
+
 	protected override void UpdatePlayerData(EquipmentSet set) {
 
 		var player = GetActor();
@@ -92,6 +124,36 @@ internal class ExamineWindow : BaseWindow {
 			tribe: player.Customize[(int) CustomizeIndex.Tribe],
 			level: player.Level
 		);
+
+		// Check our food, and maybe select it.
+		if (SelectedFood is null && Ui.Plugin.Config.CharacterAutoFood)
+			UpdateFoodData(set, player, false);
+	}
+
+	private static DStatus[]? GetStatuses(PlayerCharacter? player) {
+		if (player is null)
+			return null;
+
+		var list = player.StatusList;
+		if (list is null)
+			return null;
+
+		int count = 0;
+		for (int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				count++;
+		}
+
+		DStatus[] result = new DStatus[count];
+		int j = 0;
+		for (int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				result[j++] = status;
+		}
+
+		return result;
 	}
 
 	private unsafe PlayerCharacter? GetActor() {
@@ -103,8 +165,8 @@ internal class ExamineWindow : BaseWindow {
 
 		Lazy<Dictionary<string, PlayerCharacter>> players = new(() => {
 			var rawPlayers = Ui.Plugin.ObjectTable
-			.Where(obj => obj is PlayerCharacter && obj.IsValid())
-			.Cast<PlayerCharacter>();
+				.Where(obj => obj is PlayerCharacter && obj.IsValid())
+				.Cast<PlayerCharacter>();
 
 			var result = new Dictionary<string, PlayerCharacter>();
 

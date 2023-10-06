@@ -3,7 +3,6 @@ using System;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using Dalamud.Hooking;
-using Dalamud.Logging;
 
 namespace GearsetHelperPlugin;
 
@@ -22,8 +21,9 @@ internal class GameFunctions : IDisposable {
 	public GameFunctions(Plugin plugin) {
 		Plugin = plugin;
 
-		var erPtr = Plugin.SigScanner.ScanText("48 89 5C 24 ?? 57 48 83 EC 20 49 8B D8 48 8B F9 4D 85 C0 0F 84 ?? ?? ?? ?? 85 D2");
-		_examineRefreshHook = Hook<ExamineRefreshedDelegate>.FromAddress(erPtr, ExamineRefreshed); // new Hook<ExamineRefreshedDelegate>(erPtr, ExamineRefreshed);
+		IntPtr erPtr = Plugin.SigScanner.ScanText("48 89 5C 24 ?? 57 48 83 EC 20 49 8B D8 48 8B F9 4D 85 C0 0F 84 ?? ?? ?? ?? 85 D2");
+
+		_examineRefreshHook = Plugin.Interop.HookFromAddress(erPtr, (ExamineRefreshedDelegate) ExamineRefreshed);
 		_examineRefreshHook?.Enable();
 	}
 
@@ -43,7 +43,7 @@ internal class GameFunctions : IDisposable {
 			ExamineOnRefresh?.Invoke(id, (int) a2, load);
 
 		} catch (Exception ex) {
-			PluginLog.LogError($"Error in ExamineRefreshed Hook. Details:\n{ex}");
+			Plugin.Logger.Error($"Error in ExamineRefreshed Hook. Details:\n{ex}");
 		}
 
 		return result;

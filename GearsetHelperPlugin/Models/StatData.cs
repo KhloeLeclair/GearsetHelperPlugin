@@ -13,15 +13,15 @@ internal record StatData(
 	public int Delta { get; set; }
 	public int Waste { get; set; }
 	public int Limit { get; set; } = -1;
-
 	public int Food { get; set; }
+	public int GroupBonus { get; set; }
 
 	public int Full => Base + Gear + Delta;
 	public int Extra => Gear + Delta - Waste;
 	public int ValueNoFood => Base + Gear + Delta - Waste;
 	public int Remaining => Math.Max(0, Limit - ValueNoFood);
-	public int Value => ValueNoFood + Food;
-	public int ExtraFood => Extra + Food;
+	public int Value => ValueNoFood + Food + GroupBonus;
+	public int ExtraFood => Extra + Food + GroupBonus;
 
 	public int PreviousTier { get; set; }
 	public int NextTier { get; set; }

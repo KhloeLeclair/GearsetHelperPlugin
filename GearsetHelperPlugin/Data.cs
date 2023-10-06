@@ -5,8 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 
-using Dalamud.Logging;
-
 using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
 
@@ -18,6 +16,11 @@ namespace GearsetHelperPlugin;
 internal record StatAtLevel(
 	int Main,
 	int Sub
+);
+
+internal record StatOrTank(
+	int Main,
+	int Tank
 );
 
 internal record StatType(
@@ -61,7 +64,8 @@ internal enum Stat {
 	Perception = 73,
 }
 
-internal static class Data {
+
+internal static partial class Data {
 
 	#region Stat Abbreviations
 
@@ -101,6 +105,8 @@ internal static class Data {
 
 	#region Sheet Access
 
+	internal static ExcelSheet<ExtendedAction>? ActionSheet { get; set; }
+	internal static ExcelSheet<ActionTransient>? ActionTransSheet { get; set; }
 	internal static ExcelSheet<ExtendedItem>? ItemSheet { get; set; }
 	internal static ExcelSheet<ExtendedBaseParam>? ParamSheet { get; set; }
 	internal static ExcelSheet<ParamGrow>? GrowSheet { get; set; }
@@ -112,9 +118,9 @@ internal static class Data {
 	internal static ExcelSheet<ItemAction>? ItemActionSheet { get; set; }
 	internal static ExcelSheet<ItemFood>? FoodSheet { get; set; }
 
-	[MemberNotNullWhen(true, nameof(ItemSheet), nameof(ItemActionSheet), nameof(FoodSheet), nameof(ParamSheet), nameof(GrowSheet), nameof(LevelSheet), nameof(MateriaSheet), nameof(RaceSheet), nameof(TribeSheet), nameof(ClassSheet))]
+	[MemberNotNullWhen(true, nameof(ActionSheet), nameof(ActionTransSheet), nameof(ItemSheet), nameof(ItemActionSheet), nameof(FoodSheet), nameof(ParamSheet), nameof(GrowSheet), nameof(LevelSheet), nameof(MateriaSheet), nameof(RaceSheet), nameof(TribeSheet), nameof(ClassSheet))]
 	internal static bool CheckSheets(ExcelModule? excel = null) {
-		if (ItemSheet == null || ItemActionSheet == null || FoodSheet == null || ParamSheet == null || GrowSheet == null || LevelSheet == null || MateriaSheet == null || RaceSheet == null || TribeSheet == null || ClassSheet == null) {
+		if (ActionSheet == null || ActionTransSheet == null || ItemSheet == null || ItemActionSheet == null || FoodSheet == null || ParamSheet == null || GrowSheet == null || LevelSheet == null || MateriaSheet == null || RaceSheet == null || TribeSheet == null || ClassSheet == null) {
 			if (excel is not null) {
 				LoadSheets(excel);
 				return CheckSheets(null);
@@ -127,6 +133,8 @@ internal static class Data {
 	}
 
 	internal static void LoadSheets(ExcelModule excel) {
+		ActionSheet = excel.GetSheet<ExtendedAction>();
+		ActionTransSheet = excel.GetSheet<ActionTransient>();
 		ItemSheet = excel.GetSheet<ExtendedItem>();
 		ItemActionSheet = excel.GetSheet<ItemAction>();
 		FoodSheet = excel.GetSheet<ItemFood>();
@@ -216,12 +224,12 @@ internal static class Data {
 					_Food = Food;
 					_Medicine = Medicine;
 				} else
-					PluginLog.Log("Started loading food while LoadFoodAsync was running?");
+					Plugin.INSTANCE.Logger.Warning("Started loading food while LoadFoodAsync was running?");
 
 				FoodLoaded = true;
 
 			} catch (Exception ex) {
-				PluginLog.LogError($"Encountered an error while loading food in a thread. Details:\n{ex}");
+				Plugin.INSTANCE.Logger.Error($"Encountered an error while loading food in a thread. Details:\n{ex}");
 			}
 
 			LoadingFood = false;
@@ -286,7 +294,7 @@ internal static class Data {
 
 		sw.Stop();
 
-		PluginLog.Log($"Found {foodList.Count} food and {medicineList.Count} medicine in {sw.ElapsedMilliseconds}ms");
+		Plugin.INSTANCE.Logger.Info($"Found {foodList.Count} food and {medicineList.Count} medicine in {sw.ElapsedMilliseconds}ms");
 	}
 
 	#endregion
@@ -326,10 +334,6 @@ internal static class Data {
 		Stat.SPS
 	};
 
-
-	internal static readonly int MAIN_COEFFICIENT = 165;
-	internal static readonly int MAIN_TANK_COEFFICIENT = 156;
-
 	internal static readonly Dictionary<uint, int> COEFFICIENTS = new() {
 		[(int) Stat.CRT] = 200,
 		[(int) Stat.DET] = 140,
@@ -343,7 +347,6 @@ internal static class Data {
 		[(int) Stat.DEF] = 15,
 		[(int) Stat.MDF] = 15,
 	};
-
 
 	internal static readonly Dictionary<uint, StatAtLevel> LevelStats = new() {
 		[00] = new (Main: 0, Sub: 0),

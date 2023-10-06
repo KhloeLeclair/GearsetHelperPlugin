@@ -11,8 +11,6 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-using Dalamud.Logging;
-
 using Lumina.Excel.GeneratedSheets;
 
 using GearsetHelperPlugin.Models;
@@ -113,7 +111,7 @@ internal class Exporter : IDisposable {
 			result.Url = $"https://ffxivteamcraft.com/import/{encoded}";
 
 		} catch (Exception ex) {
-			PluginLog.Error($"An error occurred while exporting gearset to Teamcraft.\nDetails: {ex}");
+			Plugin.Logger.Error($"An error occurred while exporting gearset to Teamcraft.\nDetails: {ex}");
 			result.Error = "An error occurred. See the log for details.";
 		}
 
@@ -197,7 +195,7 @@ internal class Exporter : IDisposable {
 
 			if (response.IsSuccessStatusCode) {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogInformation($"Success. Response: {value}");
+				Plugin.Logger.Info($"Success. Response: {value}");
 				var parsedResponse = JsonConvert.DeserializeObject<EtroResponse>(value);
 				if (parsedResponse != null && !string.IsNullOrEmpty(parsedResponse.AccessToken)) {
 					result.ApiKey = parsedResponse.AccessToken;
@@ -208,7 +206,7 @@ internal class Exporter : IDisposable {
 
 			} else {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogError($"Failure. Error: {response.StatusCode}\nDetails:{value}");
+				Plugin.Logger.Error($"Failure. Error: {response.StatusCode}\nDetails:{value}");
 				result.Error = "Etro returned invalid response.";
 				var parsedError = JsonConvert.DeserializeObject<EtroError>(value);
 				if (parsedError != null) {
@@ -223,7 +221,7 @@ internal class Exporter : IDisposable {
 			}
 
 		} catch (Exception ex) {
-			PluginLog.Error($"An error occurred while logging in to Etro.\nDetails: {ex}");
+			Plugin.Logger.Error($"An error occurred while logging in to Etro.\nDetails: {ex}");
 			result.Error = ex.Message;
 		}
 
@@ -239,7 +237,7 @@ internal class Exporter : IDisposable {
 				return result;
 			}
 
-			PluginLog.LogInformation("Exporting gearset to Etro.");
+			Plugin.Logger.Info("Exporting gearset to Etro.");
 
 			ClassJob? jobData = gearset.JobRow();
 			if (jobData == null) {
@@ -284,7 +282,7 @@ internal class Exporter : IDisposable {
 					had_right = true;
 
 				} else if (!ETRO_SLOT_MAP.TryGetValue(slot, out mappedSlot)) {
-					PluginLog.Information($"Unknown Slot for Item: {data.Name} -- Slot: {slot}");
+					Plugin.Logger.Warning($"Unknown Slot for Item: {data.Name} -- Slot: {slot}");
 					continue;
 				}
 
@@ -292,7 +290,7 @@ internal class Exporter : IDisposable {
 					continue;
 
 				if (obj.ContainsKey(mappedSlot)) {
-					PluginLog.Information($"Duplicate item slot usage for Item: {data.Name} -- Slot: {slot} = {mappedSlot}");
+					Plugin.Logger.Warning($"Duplicate item slot usage for Item: {data.Name} -- Slot: {slot} = {mappedSlot}");
 					continue;
 				}
 
@@ -346,7 +344,7 @@ internal class Exporter : IDisposable {
 					{ "specialist", true }
 				});
 
-			PluginLog.Information($"Result:\n{obj.ToString(Formatting.None)}");
+			Plugin.Logger.Debug($"Result:\n{obj.ToString(Formatting.None)}");
 
 			var content = new StringContent(obj.ToString(Formatting.None), Encoding.UTF8, "application/json");
 
@@ -363,7 +361,7 @@ internal class Exporter : IDisposable {
 
 			if (response.IsSuccessStatusCode) {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogInformation($"Success. Response: {value}");
+				Plugin.Logger.Info($"Success. Response: {value}");
 				var parsedResponse = JsonConvert.DeserializeObject<EtroResponse>(value);
 				if (parsedResponse != null && !string.IsNullOrEmpty(parsedResponse.Id)) {
 					result.Url = $"https://etro.gg/gearset/{parsedResponse.Id}";
@@ -374,7 +372,7 @@ internal class Exporter : IDisposable {
 
 			} else {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogError($"Failure. Error: {response.StatusCode}\nDetails:{value}");
+				Plugin.Logger.Error($"Failure. Error: {response.StatusCode}\nDetails:{value}");
 				var parsedError = JsonConvert.DeserializeObject<EtroError>(value);
 				if (parsedError != null && !string.IsNullOrEmpty(parsedError.Detail)) {
 					result.Error = $"Etro returned an error: {parsedError.Detail}";
@@ -384,7 +382,7 @@ internal class Exporter : IDisposable {
 			}
 
 		} catch (Exception ex) {
-			PluginLog.Error($"An error occurred while exporting gearset to Etro.\nDetails: {ex}");
+			Plugin.Logger.Error($"An error occurred while exporting gearset to Etro.\nDetails: {ex}");
 			result.Error = "An error occurred. See the log for details.";
 		}
 
@@ -502,7 +500,7 @@ internal class Exporter : IDisposable {
 		ExportResponse result = new();
 
 		try {
-			PluginLog.LogInformation("Exporting gearset to Ariyala.");
+			Plugin.Logger.Info("Exporting gearset to Ariyala.");
 
 			var jobData = gearset.JobRow();
 			if (jobData == null) {
@@ -545,7 +543,7 @@ internal class Exporter : IDisposable {
 					had_right = true;
 
 				} else if (!ARIYALA_SLOT_MAP.TryGetValue(slot, out mappedSlot)) {
-					PluginLog.Information($"Unknown Slot for Item: {item.Name} -- Slot: {slot}");
+					Plugin.Logger.Warning($"Unknown Slot for Item: {item.Name} -- Slot: {slot}");
 					continue;
 				}
 
@@ -579,7 +577,7 @@ internal class Exporter : IDisposable {
 
 					uint stat = materia.BaseParam.Row;
 					if (!ARIYALA_STAT_MAP.TryGetValue(stat, out string? mappedStat)) {
-						PluginLog.Information($"Unknown Stat for Materia: {materia.Item[rawMateria.Grade]?.Value?.Name} -- Stat: {stat}");
+						Plugin.Logger.Warning($"Unknown Stat for Materia: {materia.Item[rawMateria.Grade]?.Value?.Name} -- Stat: {stat}");
 						continue;
 					}
 
@@ -653,7 +651,7 @@ internal class Exporter : IDisposable {
 				{ "myInventory", inv }
 			};
 
-			PluginLog.Information($"Result:\n{obj.ToString(Newtonsoft.Json.Formatting.None)}");
+			Plugin.Logger.Debug($"Result:\n{obj.ToString(Newtonsoft.Json.Formatting.None)}");
 
 			var content = new StringContent(obj.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/x-www-form-urlencoded");
 
@@ -669,18 +667,18 @@ internal class Exporter : IDisposable {
 
 			if (response.IsSuccessStatusCode) {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogInformation($"Success. ID: {value}");
+				Plugin.Logger.Info($"Success. ID: {value}");
 				if (!string.IsNullOrEmpty(value))
 					result.Url = $"https://ffxiv.ariyala.com/{value}";
 			} else {
 				string? value = await response.Content.ReadAsStringAsync();
-				PluginLog.LogError($"Failure. Error: {response.StatusCode}\nDetails:{value}");
+				Plugin.Logger.Error($"Failure. Error: {response.StatusCode}\nDetails:{value}");
 				result.Error = "Ariyala returned invalid response.";
 			}
 
 		} catch (Exception ex) {
 			/* Do nothing~ */
-			PluginLog.Error($"An error occurred while exporting gearset to Ariyala.\nDetails: {ex}");
+			Plugin.Logger.Error($"An error occurred while exporting gearset to Ariyala.\nDetails: {ex}");
 			result.Error = "An error occurred. See log for details.";
 		}
 

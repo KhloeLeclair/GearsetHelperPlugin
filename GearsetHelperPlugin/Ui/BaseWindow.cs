@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Text;
 using System.Threading.Tasks;
 
 using Dalamud;
@@ -16,12 +15,15 @@ using Dalamud.Interface.Components;
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 using ImGuiNET;
-using ImGuiScene;
 
 using Lumina.Excel.GeneratedSheets;
 
 using GearsetHelperPlugin.Models;
 using GearsetHelperPlugin.Sheets;
+using Dalamud.Interface.Internal;
+
+using Dalamud.Plugin.Services;
+using Dalamud.Interface.Utility;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -44,8 +46,8 @@ internal abstract class BaseWindow : IDisposable {
 	protected PluginUI Ui { get; }
 	protected abstract string Name { get; }
 
-	private readonly Dictionary<uint, TextureWrap?> ItemIcons = new();
-	private readonly Dictionary<uint, TextureWrap?> ItemIconsHQ = new();
+	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIcons = new();
+	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIconsHQ = new();
 
 	protected EquipmentSet? CachedSet;
 	protected Food? SelectedFood;
@@ -61,6 +63,8 @@ internal abstract class BaseWindow : IDisposable {
 
 	private byte SelectedLevelSync = 90;
 	private uint SelectedIlvlSync = 665;
+
+	private uint SelectedGroupBonus = 0;
 
 	private float WidestFood = 0;
 
@@ -115,20 +119,21 @@ internal abstract class BaseWindow : IDisposable {
 
 	#region Icons
 
-	protected TextureWrap? GetIcon(Item? item, bool hq = false) {
+	protected IDalamudTextureWrap? GetIcon(Item? item, bool hq = false) {
 		if (item is not null)
 			return GetIcon(item.Icon, hq);
 		return null;
 	}
 
-	protected TextureWrap? GetIcon(uint id, bool hq = false) {
+	protected IDalamudTextureWrap? GetIcon(uint id, bool hq = false) {
 		if (hq) {
 			if (ItemIconsHQ.TryGetValue(id, out var icon))
 				return icon;
 
-			icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
+			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.ItemHighQuality | ITextureProvider.IconFlags.HiRes);
+			//icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
 			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
-				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
+				Ui.Plugin.Logger.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
 				icon = null;
 			}
 
@@ -139,9 +144,10 @@ internal abstract class BaseWindow : IDisposable {
 			if (ItemIcons.TryGetValue(id, out var icon))
 				return icon;
 
-			icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
+			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.HiRes);
+			//icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
 			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
-				Dalamud.Logging.PluginLog.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
+				Ui.Plugin.Logger.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
 				icon = null;
 			}
 
@@ -236,6 +242,7 @@ internal abstract class BaseWindow : IDisposable {
 		UpdatePlayerData(result);
 
 		result.UpdateSync(SelectedLevelSync, SelectedIlvlSync);
+		result.UpdateGroupBonus(SelectedGroupBonus);
 
 		result.Food = SelectedFood;
 		result.Medicine = SelectedMedicine;
@@ -243,7 +250,8 @@ internal abstract class BaseWindow : IDisposable {
 		result.Recalculate();
 
 		sw.Stop();
-		Dalamud.Logging.PluginLog.Log($"Processed equipment in {sw.ElapsedMilliseconds}ms");
+
+		Ui.Plugin.Logger.Debug($"Processed equipment in {sw.ElapsedMilliseconds}ms");
 
 		return result;
 	}
@@ -398,13 +406,23 @@ internal abstract class BaseWindow : IDisposable {
 				ImGui.SetCursorPos(oldPos);
 
 				var image = GetIcon(item.Icon, food.HQ);
+				int width = 0;
 				if (image != null) {
+					width = image.Width;
+					int height = image.Height;
+
+					if ( height > size.Y ) {
+						float scale = (float)size.Y / height;
+						width = (int) (width * scale);
+						height = (int) (height * scale);
+					}
+
 					ImGui.SetCursorPosX(oldPos.X);
-					ImGui.SetCursorPosY(oldPos.Y + (size.Y - image.Height) / 2);
-					ImGui.Image(image.ImGuiHandle, new Vector2(image.Width, image.Height));
+					ImGui.SetCursorPosY(oldPos.Y + (size.Y - height) / 2);
+					ImGui.Image(image.ImGuiHandle, new Vector2(width, height));
 				}
 
-				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
+				ImGui.SetCursorPosX(oldPos.X + width + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y);
 				ImGui.Text(item.Name);
 				if (food.HQ) {
@@ -557,9 +575,9 @@ internal abstract class BaseWindow : IDisposable {
 				int levelsync = SelectedLevelSync;
 				if (ImGui.InputInt(Localization.Localize("gui.level-sync", "Level Sync"), ref levelsync, 1, 10)) {
 					SelectedLevelSync = (byte) Math.Clamp(levelsync, 1, 90);
-					CachedSet.UpdateSync(SelectedLevelSync, 0);
+					if (CachedSet.UpdateSync(SelectedLevelSync, 0))
+						CachedSet.Recalculate();
 					SelectedIlvlSync = CachedSet.ILvlSync;
-					CachedSet.Recalculate();
 				}
 
 				ImGui.SameLine();
@@ -568,8 +586,15 @@ internal abstract class BaseWindow : IDisposable {
 				int ilvlsync = (int) (SelectedIlvlSync == 0 ? CachedSet.ILvlSync : SelectedIlvlSync);
 				if (ImGui.InputInt(Localization.Localize("gui.ilvl-sync", "Item Level Sync"), ref ilvlsync, 5, 10)) {
 					SelectedIlvlSync = (uint) Math.Clamp(ilvlsync, 5, 665);
-					CachedSet.UpdateSync(SelectedLevelSync, SelectedIlvlSync);
-					CachedSet.Recalculate();
+					if (CachedSet.UpdateSync(SelectedLevelSync, SelectedIlvlSync))
+						CachedSet.Recalculate();
+				}
+
+				int gbonus = (int) SelectedGroupBonus;
+				if (ImGui.InputInt(Localization.Localize("gui.group-bonus", "Party Bonus %"), ref gbonus, 1, 5)) {
+					SelectedGroupBonus = (uint) Math.Clamp(gbonus, 0, 5);
+					if (CachedSet.UpdateGroupBonus(SelectedGroupBonus))
+						CachedSet.Recalculate();
 				}
 
 				if (SelectedFood is not null || CachedSet.RelevantFood.Count > 0) {
@@ -620,7 +645,11 @@ internal abstract class BaseWindow : IDisposable {
 			}
 
 			if (ImGui.CollapsingHeader(Localization.Localize("gui.attributes", "Attributes"), ImGuiTreeNodeFlags.DefaultOpen)) {
-				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: (CachedSet.Food is not null || CachedSet.Medicine is not null));
+				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: (CachedSet.Food is not null || CachedSet.Medicine is not null), includeBonus: SelectedGroupBonus != 0);
+			}
+
+			if (CachedSet.DamageValues.Count > 0 && ImGui.CollapsingHeader(Localization.Localize("gui.damage", "Estimated Damage"), ImGuiTreeNodeFlags.None)) {
+				DrawDamageTable(CachedSet.DamageValues);
 			}
 
 			if (ImGui.CollapsingHeader(Localization.Localize("gui.calculated", "Calculated"), ImGuiTreeNodeFlags.DefaultOpen)) {
@@ -672,7 +701,7 @@ internal abstract class BaseWindow : IDisposable {
 						ExtendedItem? item = entry.Item1;
 						ImGui.TableNextRow();
 
-						TextureWrap? icon = GetIcon(item);
+						IDalamudTextureWrap? icon = GetIcon(item);
 						int height = icon == null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 
 						ImGui.TableSetColumnIndex(0);
@@ -724,7 +753,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.Spacing();
 					}
 
-					TextureWrap? icon = GetIcon(item, rawItem.HighQuality);
+					IDalamudTextureWrap? icon = GetIcon(item, rawItem.HighQuality);
 					int height = icon is null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 					if (icon != null) {
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
@@ -736,10 +765,11 @@ internal abstract class BaseWindow : IDisposable {
 
 					if (CachedSet.ILvlSync > 0 && item.LevelItem.Row > CachedSet.ILvlSync) {
 						ImGui.SameLine();
+						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
 					}
 
-					ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 30);
+					ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 32);
 
 					ImGui.PushID($"item#link#{rawItem.ID}");
 					if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
@@ -760,10 +790,11 @@ internal abstract class BaseWindow : IDisposable {
 	internal static void DrawCalculatedTable(IEnumerable<CalculatedStat> calculated) {
 		ImGui.BeginTable("CalcTable", 2, ImGuiTableFlags.RowBg);
 
-		ImGui.TableSetupColumn(Localization.Localize("gui.name", "Name"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		/*ImGui.TableSetupColumn(Localization.Localize("gui.name", "Name"), ImGuiTableColumnFlags.WidthStretch, 1f);
 		ImGui.TableSetupColumn(Localization.Localize("gui.value", "Value"), ImGuiTableColumnFlags.None, 1f);
 
 		ImGui.TableHeadersRow();
+		*/
 
 		foreach (var entry in calculated) {
 			ImGui.TableNextRow();
@@ -778,13 +809,98 @@ internal abstract class BaseWindow : IDisposable {
 		ImGui.EndTable();
 	}
 
-	internal static void DrawStatTable(IEnumerable<StatData> stats, Dictionary<uint, ExtendedBaseParam> paramDictionary, bool includeBase = false, bool includeRemaining = false, bool includeTiers = false, bool includeFood = false) {
+	internal static void DrawDamageTable(IEnumerable<KeyValuePair<int, DamageValues>> data) {
+		ImGui.BeginTable("DamageTable", 6, ImGuiTableFlags.Resizable | ImGuiTableFlags.RowBg);
+
+		ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.potency", "Potency"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.potency.tip", "The potency of the simulated attack."));
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.dmg-average", "Average"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.dmg-average.tip", "Your expected average damage, ±5%%. This takes into account your critical hit and direct hit rates."));
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.dmg-base", "Base"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.dmg-base.tip", "Your expected normal hit damage, ±5%%. This is for attacks that are not critical hits or direct hits."));
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.dmg-crit", "Crit"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.dmg-crit.tip", "Your expected critical hit damage, ±5%%. This is for attacks that are critical hits, but not direct hits."));
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.dmg-dh", "DH"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.dmg-dh.tip", "Your expected direct hit damage, ±5%%. This is for attacks that are direct hits, but not critical hits."));
+
+
+		ImGui.TableNextColumn();
+		ImGui.TableHeader(Localization.Localize("gui.dmg-dhc", "DCrit"));
+		if (ImGui.IsItemHovered())
+			ImGui.SetTooltip(Localization.Localize("gui.dmg-dhc.tip", "Your expected critical direct hit damage, ±5%%. This is for attacks that are critical hits and direct hits."));
+
+		/*
+		ImGui.TableSetupColumn(Localization.Localize("gui.potency", "Potency"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.dmg-average", "Average"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.dmg-base", "Base"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.dmg-crit", "Crit"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.dmg-dh", "DH"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		ImGui.TableSetupColumn(Localization.Localize("gui.dmg-dhc", "DCrit"), ImGuiTableColumnFlags.WidthStretch, 1f);
+		*/
+
+		//ImGui.TableHeadersRow();
+
+		foreach (var entry in data) {
+			int key = entry.Key;
+			var value = entry.Value;
+
+			ImGui.TableNextRow();
+
+			ImGui.TableNextColumn();
+			ImGui.Text(key.ToString());
+
+			ImGui.TableNextColumn();
+			ImGui.Text(value.Average.ToString("N0"));
+
+			ImGui.TableNextColumn();
+			ImGui.TextColored(ImGuiColors.DalamudGrey, value.Base.ToString("N0"));
+
+			ImGui.TableNextColumn();
+			ImGui.Text(value.CriticalHit.ToString("N0"));
+
+			ImGui.TableNextColumn();
+			ImGui.TextColored(ImGuiColors.DalamudGrey, value.DirectHit.ToString("N0"));
+
+			ImGui.TableNextColumn();
+			ImGui.Text(value.DirectCriticalHit.ToString("N0"));
+		}
+
+		ImGui.EndTable();
+	}
+
+	internal static void DrawStatTable(
+		IEnumerable<StatData> stats,
+		Dictionary<uint, ExtendedBaseParam> paramDictionary,
+		bool includeBase = false,
+		bool includeRemaining = false,
+		bool includeTiers = false,
+		bool includeFood = false,
+		bool includeBonus = false
+	) {
 		int cols = 8;
 		if (includeBase)
 			cols += 2;
 		if (includeRemaining)
 			cols += 2;
 		if (includeFood)
+			cols += 2;
+		if (includeBonus)
 			cols += 2;
 		if (includeTiers)
 			cols += 3;
@@ -806,6 +922,11 @@ internal abstract class BaseWindow : IDisposable {
 		if (includeFood) {
 			ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
 			ImGui.TableSetupColumn("Food", ImGuiTableColumnFlags.None, 1f);
+		}
+
+		if (includeBonus) {
+			ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
+			ImGui.TableSetupColumn("Party", ImGuiTableColumnFlags.None, 1f);
 		}
 
 		ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 10f);
@@ -901,6 +1022,20 @@ internal abstract class BaseWindow : IDisposable {
 
 				if (ImGui.IsItemHovered())
 					ImGui.SetTooltip(Localization.Localize("attr.food", "The attribute points gained from food."));
+			}
+
+			if (includeBonus) {
+				ImGui.TableNextColumn();
+				ImGui.TextColored(ImGuiColors.DalamudGrey3, "+");
+
+				ImGui.TableNextColumn();
+				if (stat.GroupBonus > 0)
+					ImGui.TextColored(ImGuiColors.ParsedGreen, stat.GroupBonus.ToString());
+				else
+					ImGui.TextColored(ImGuiColors.DalamudGrey, stat.GroupBonus.ToString());
+
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("attr.group-bonus", "The attribute points gained from the Party Bonus."));
 			}
 
 			ImGui.TableNextColumn();

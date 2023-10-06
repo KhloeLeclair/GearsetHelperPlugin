@@ -1,21 +1,20 @@
+// Ignore Spelling: Plugin
+
 using System.IO;
 
 using Dalamud;
-using Dalamud.Data;
 using Dalamud.Game;
-using Dalamud.Game.ClientState.Objects;
-using Dalamud.Game.ClientState;
-using Dalamud.Game.Command;
-using Dalamud.Game.Gui;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 
-using GearsetHelperPlugin.Sheets;
+using Dalamud.Plugin.Services;
 
 namespace GearsetHelperPlugin;
 
 public class Plugin : IDalamudPlugin
 {
+	internal static Plugin INSTANCE { get; private set; } = null!;
+
 	internal const string PluginName = "Gearset Helper";
 	public string Name => PluginName;
 
@@ -23,28 +22,37 @@ public class Plugin : IDalamudPlugin
 	internal DalamudPluginInterface Interface { get; init; }
 
 	[PluginService]
-	internal ChatGui ChatGui { get; init; }
+	internal IChatGui ChatGui { get; init; }
 
 	[PluginService]
-	internal ClientState ClientState { get; init; }
+	internal IClientState ClientState { get; init; }
 
 	[PluginService]
-	internal CommandManager CommandManager { get; init; }
+	internal ICommandManager CommandManager { get; init; }
 
 	[PluginService]
-	internal DataManager DataManager { get; init; }
+	internal IDataManager DataManager { get; init; }
 
 	[PluginService]
-	internal Framework Framework { get; init; }
+	internal IFramework Framework { get; init; }
 
 	[PluginService]
-	internal GameGui GameGui { get; init; }
+	internal IGameGui GameGui { get; init; }
 
 	[PluginService]
-	internal ObjectTable ObjectTable { get; init; }
+	internal ITextureProvider TextureProvider { get; init; }
 
 	[PluginService]
-	internal SigScanner SigScanner { get; init; }
+	internal IGameInteropProvider Interop { get; init; }
+
+	[PluginService]
+	internal IObjectTable ObjectTable { get; init; }
+
+	[PluginService]
+	internal ISigScanner SigScanner { get; init; }
+
+	[PluginService]
+	internal IPluginLog Logger { get; init; }
 
 	internal GameFunctions Functions { get; }
 
@@ -56,6 +64,7 @@ public class Plugin : IDalamudPlugin
 
 	#pragma warning disable 8618
 	public Plugin() {
+		INSTANCE = this;
 
 		string i18n_path = Path.Join(
 			Path.GetDirectoryName(Interface!.AssemblyLocation.FullName),

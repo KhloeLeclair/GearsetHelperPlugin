@@ -80,7 +80,14 @@ internal class CharacterWindow : BaseWindow {
 		if (statuses is not null)
 			foreach (var status in statuses) {
 				if (status.StatusId == 48) {
-					set.UpdateFood((uint) status.StackCount, update);
+					bool hq = false;
+					uint foodId = status.Param;
+					if ( foodId >= 10000 ) {
+						hq = true;
+						foodId -= 10000;
+					}
+
+					set.UpdateFood(foodId, hq, update);
 					SelectedFood = set.Food;
 					break;
 				}
