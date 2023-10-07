@@ -1,14 +1,16 @@
+using System;
 using System.Numerics;
 using System.Threading.Tasks;
 
 using Dalamud;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Windowing;
 
 using ImGuiNET;
 
 namespace GearsetHelperPlugin.Ui;
 
-internal class SettingsWindow {
+internal class SettingsWindow : Window, IDisposable {
 
 	private readonly PluginUI Ui;
 
@@ -29,28 +31,38 @@ internal class SettingsWindow {
 		}
 	}
 
-	public SettingsWindow(PluginUI ui) {
+	public SettingsWindow(PluginUI ui) : base(
+		"Gearset Helper Settings",
+		ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.AlwaysAutoResize
+	) {
 		Ui = ui;
+
+		Size = new Vector2(400, 100);
+		SizeCondition = ImGuiCond.Appearing;
 	}
 
+	public void Dispose() { }
+
 	public void OpenSettings() {
-		visible = true;
+		IsOpen = true;
+
+		WindowName = Localization.Localize("gui.settings", "Gearset Helper Settings");
+
 		username = string.Empty;
 		password = string.Empty;
 		token = Config.EtroApiKey ?? string.Empty;
 	}
 
-	public void Draw() {
-		if (!Visible)
-			return;
-
+	public override void Draw() {
+		
+		/*
 		float scale = ImGui.GetFontSize() / 17;
 
 		ImGui.SetNextWindowSize(new Vector2(400 * scale, 100), ImGuiCond.Appearing);
 		ImGui.SetNextWindowSizeConstraints(new Vector2(400 * scale, 100), new Vector2(500 * scale, float.MaxValue));
 
 		if (ImGui.Begin(Localization.Localize("gui.settings", "Gearset Helper Settings"), ref visible, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.AlwaysAutoResize)) {
-
+		*/
 			int ilvl = (int) Config.FoodMinIlvl;
 			if (ImGui.DragInt(Localization.Localize("gui.settings.food-ilvl", "Food Min Ilvl"), ref ilvl, 10, 0, 610)) {
 				Config.FoodMinIlvl = (uint) ilvl;
@@ -200,9 +212,9 @@ internal class SettingsWindow {
 				} else
 					ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.settings.logging-in", "Logging in..."));
 			}
-		}
+		//}
 
-		ImGui.End();
+		//ImGui.End();
 	}
 
 }
