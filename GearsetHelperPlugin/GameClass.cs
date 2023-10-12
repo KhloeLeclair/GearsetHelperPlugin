@@ -2,6 +2,7 @@ using Lumina.Excel.GeneratedSheets;
 using System.Collections.Generic;
 
 using GearsetHelperPlugin.Sheets;
+using System.Data;
 
 namespace GearsetHelperPlugin;
 
@@ -66,17 +67,46 @@ internal static partial class Data {
 		return job.ToRow()?.ClassJobParent?.Value?.ToGameClass();
 	}
 
-	public static bool IsCaster(this GameClass job) {
-		return job.ToRow()?.ClassJobCategory?.Row == 31;
-	}
+	public static bool IsPhysical(this ClassJob job) => job.ClassJobCategory.Row == 30;
 
-	public static bool IsTank(this GameClass job) {
-		return job.ToRow()?.Role == 1;
-	}
+	public static bool IsMagical(this ClassJob job) => job.ClassJobCategory.Row == 31;
 
-	public static bool IsHealer(this GameClass job) {
-		return job.ToRow()?.Role == 4;
-	}
+	public static bool IsCrafter(this ClassJob job) => job.ClassJobCategory.Row == 33;
+
+	public static bool IsGatherer(this ClassJob job) => job.ClassJobCategory.Row == 32;	
+
+	public static bool IsTank(this ClassJob job) => job.Role == 1;
+
+	public static bool IsMelee(this ClassJob job) => job.Role == 2;
+
+	public static bool IsRanged(this ClassJob job) => job.Role == 3;
+
+	public static bool IsHealer(this ClassJob job) => job.Role == 4;
+
+	public static bool IsPhysicalRanged(this ClassJob job) => job.IsRanged() && job.IsPhysical();
+
+	public static bool IsMagicalRanged(this ClassJob job) => job.IsRanged() && job.IsMagical();
+
+	public static bool IsPhysical(this GameClass gc) => gc.ToRow()?.IsPhysical() ?? false;
+
+	public static bool IsMagical(this GameClass gc) => gc.ToRow()?.IsMagical() ?? false;
+
+	public static bool IsCrafter(this GameClass gc) => gc.ToRow()?.IsCrafter() ?? false;
+
+	public static bool IsGatherer(this GameClass gc) => gc.ToRow()?.IsGatherer() ?? false;
+
+	public static bool IsTank(this GameClass gc) => gc.ToRow()?.IsTank() ?? false;
+
+	public static bool IsHealer(this GameClass gc) => gc.ToRow()?.IsHealer() ?? false;
+
+	public static bool IsRanged(this GameClass gc) => gc.ToRow()?.IsRanged() ?? false;
+
+	public static bool IsMelee(this GameClass gc) => gc.ToRow()?.IsMelee() ?? false;
+
+	public static bool IsPhysicalRanged(this GameClass gc) => gc.ToRow()?.IsPhysicalRanged() ?? false;
+
+	public static bool IsMagicalRanged(this GameClass gc) => gc.ToRow()?.IsMagicalRanged() ?? false;
+
 
 	public static IEnumerable<ExtendedAction> GetMatchingActions(this GameClass job, uint level) {
 		if (!CheckSheets())
@@ -431,7 +461,7 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 			};
 
 		// Maim and Mend
-		if (job.IsCaster())
+		if (job.IsMagical())
 			return level switch {
 				>= 40 => 1.3f,
 				>= 20 => 1.1f,

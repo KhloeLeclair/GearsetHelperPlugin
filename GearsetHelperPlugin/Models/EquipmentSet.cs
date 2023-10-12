@@ -1039,7 +1039,7 @@ internal class EquipmentSet {
 			Stat key = (Stat) entry.Key;
 			entry.Value.GroupBonus = 0;
 			if ( GroupBonus != 0f && (key == Stat.STR || key == Stat.DEX || key == Stat.VIT || key == Stat.INT || key == Stat.MND) ) {
-				int bonus = (int) MathF.Floor(entry.Value.Value * GroupBonus);
+				int bonus = (int) MathF.Floor(entry.Value.ValueNoFood * GroupBonus);
 				entry.Value.GroupBonus = bonus;
 			}
 		}

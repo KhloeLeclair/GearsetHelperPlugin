@@ -24,6 +24,10 @@ using Dalamud.Interface.Internal;
 
 using Dalamud.Plugin.Services;
 using Dalamud.Interface.Utility;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Enums;
+
+using DStatus = Dalamud.Game.ClientState.Statuses.Status;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -61,10 +65,10 @@ internal abstract class BaseWindow : IDisposable {
 	private string MedicineFilter = string.Empty;
 	private bool MedicineFocused = false;
 
-	private byte SelectedLevelSync = 90;
-	private uint SelectedIlvlSync = 665;
+	protected byte SelectedLevelSync = 90;
+	protected uint SelectedIlvlSync = 665;
 
-	private uint SelectedGroupBonus = 0;
+	protected uint SelectedGroupBonus = 0;
 
 	private float WidestFood = 0;
 
@@ -117,6 +121,63 @@ internal abstract class BaseWindow : IDisposable {
 
 	protected virtual Vector2? GetButtonPosition(float width, float height) { return null; }
 
+	#region Calculate Party Bonus
+
+	protected void RecalculatePartyBonus(PlayerCharacter player) {
+		if (!Ui.Plugin.Config.CharacterAutoPartyBonus)
+			return;
+
+		HashSet<string> roles = new();
+
+		bool encountered = false;
+		int members = 0;
+
+		foreach(var member in Ui.Plugin.PartyList) {
+			//Ui.Plugin.Logger.Debug($"Party Member: {member.Name} {member}");
+			if (member.ClassJob.GameData is null)
+				continue;
+
+			if ( player.ObjectId == member.ObjectId )
+				encountered = true;
+
+			members++;
+
+			var job = member.ClassJob.GameData;
+			if (job.IsTank())
+				roles.Add("tank");
+			else if (job.IsHealer())
+				roles.Add("healer");
+			else if (job.IsMelee())
+				roles.Add("melee");
+			else if (job.IsPhysicalRanged())
+				roles.Add("physranged");
+			else if (job.IsMagicalRanged())
+				roles.Add("magranged");
+			/*else
+				Ui.Plugin.Logger.Debug($"What job is {member.Name}? {member.ClassJob.Id}");*/
+		}
+
+		string entries = string.Join(", ", roles);
+
+		//Ui.Plugin.Logger.Debug($"Enc: {encountered}, count: {members}, Roles: {entries}");
+
+		uint bonus;
+
+		if (!encountered || members < 2)
+			bonus = 0;
+		else
+			bonus = (uint) roles.Count;
+
+		if (SelectedGroupBonus == bonus)
+			return;
+
+		SelectedGroupBonus = bonus;
+		if (CachedSet is not null && CachedSet.UpdateGroupBonus(SelectedGroupBonus))
+			CachedSet.Recalculate();
+	}
+
+	#endregion
+
 	#region Icons
 
 	protected IDalamudTextureWrap? GetIcon(Item? item, bool hq = false) {
@@ -166,7 +227,78 @@ internal abstract class BaseWindow : IDisposable {
 
 	protected abstract unsafe InventoryContainer* GetInventoryContainer();
 
-	protected abstract void UpdatePlayerData(EquipmentSet set);
+	protected virtual void UpdatePlayerData(EquipmentSet set) {
+		var player = GetActor();
+		if (player is null)
+			return;
+
+		set.UpdatePlayer(
+			name: player.Name.ToString(),
+			race: player.Customize[(int) CustomizeIndex.Race],
+			gender: player.Customize[(int) CustomizeIndex.Gender],
+			tribe: player.Customize[(int) CustomizeIndex.Tribe],
+			level: player.Level
+		);
+
+		// Check our food, and maybe select it.
+		if (SelectedFood is null && Ui.Plugin.Config.CharacterAutoFood)
+			UpdateFoodData(set, player, false);
+	}
+
+	protected virtual void UpdateFoodData(EquipmentSet? set = null, PlayerCharacter? player = null, bool update = true) {
+		set ??= CachedSet;
+		if (set is null)
+			return;
+
+		player ??= GetActor();
+		if (player is null)
+			return;
+
+		var statuses = GetStatuses(player);
+		if (statuses is not null)
+			foreach (var status in statuses) {
+				if (status.StatusId == 48) {
+					bool hq = false;
+					uint foodId = status.Param;
+					if (foodId >= 10000) {
+						hq = true;
+						foodId -= 10000;
+					}
+
+					set.UpdateFood(foodId, hq, update);
+					SelectedFood = set.Food;
+					break;
+				}
+			}
+	}
+
+	private static DStatus[]? GetStatuses(PlayerCharacter? player) {
+		if (player is null)
+			return null;
+
+		var list = player.StatusList;
+		if (list is null)
+			return null;
+
+		int count = 0;
+		for (int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				count++;
+		}
+
+		DStatus[] result = new DStatus[count];
+		int j = 0;
+		for (int i = 0; i < list.Length; i++) {
+			var status = list[i];
+			if (status is not null && status.StatusId != 0)
+				result[j++] = status;
+		}
+
+		return result;
+	}
+
+	protected abstract PlayerCharacter? GetActor();
 
 	protected unsafe void UpdateEquipmentSet() {
 		if (!HasEquipment()) {
@@ -240,6 +372,10 @@ internal abstract class BaseWindow : IDisposable {
 		result.Level = 90;
 
 		UpdatePlayerData(result);
+
+		var player = GetActor();
+		if (player is not null)
+			RecalculatePartyBonus(player);
 
 		result.UpdateSync(SelectedLevelSync, SelectedIlvlSync);
 		result.UpdateGroupBonus(SelectedGroupBonus);
@@ -569,6 +705,13 @@ internal abstract class BaseWindow : IDisposable {
 				ImGui.SameLine();
 				if (ImGui.Button("Teamcraft (List)"))
 					ExportTask = Ui.Plugin.Exporter.ExportTeamcraft(CachedSet);
+
+				ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 32);
+
+				ImGui.PushID($"opensettings");
+				if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
+					Ui.OpenConfig();
+				ImGui.PopID();
 			}
 
 			if (ImGui.CollapsingHeader(Localization.Localize("gui.food-sync", "Food / Sync Down"), ImGuiTreeNodeFlags.None)) {

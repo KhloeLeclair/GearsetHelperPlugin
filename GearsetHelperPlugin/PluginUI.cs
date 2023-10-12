@@ -39,7 +39,7 @@ internal class PluginUI : IDisposable {
 		Plugin.Interface.UiBuilder.OpenConfigUi -= OpenConfig;
 	}
 
-	private void OpenConfig() {
+	public void OpenConfig() {
 		Settings.OpenSettings();
 	}
 

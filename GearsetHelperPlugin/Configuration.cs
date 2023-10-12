@@ -18,6 +18,7 @@ public class Configuration : IPluginConfiguration
 	public bool FoodHQOnly { get; set; } = true;
 
 	public bool CharacterAutoFood { get; set; } = true;
+	public bool CharacterAutoPartyBonus { get; set; } = false;
 
 	public bool ExamineOpen { get; set; } = false;
 	public bool CharacterOpen { get; set; } = false;

@@ -25,6 +25,9 @@ public class Plugin : IDalamudPlugin
 	internal IChatGui ChatGui { get; init; }
 
 	[PluginService]
+	internal IPartyList PartyList { get; init; }
+
+	[PluginService]
 	internal IClientState ClientState { get; init; }
 
 	[PluginService]
