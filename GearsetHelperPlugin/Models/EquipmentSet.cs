@@ -1240,16 +1240,23 @@ internal class EquipmentSet {
 				uint statID = materia.BaseParam.Row;
 				short value = materia.Value[rawMeld.Grade];
 
-				AddGearStat(stats, statID, delta: value);
-
-				// Track this item.
-				melds++;
-
 				uint materiaItem = materia.Item[rawMeld.Grade].Row;
-				if (!MateriaCount.ContainsKey(materiaItem))
-					MateriaCount[materiaItem] = 1;
-				else
-					MateriaCount[materiaItem]++;
+				//Plugin.INSTANCE.Logger.Debug($"Materia: {rawMeld.ID} -- Item: {materiaItem}");
+
+				// If there's no item, then it's a relic stat.
+				if (materiaItem == 0)
+					AddGearStat(stats, statID, gear: value);
+				else {
+					AddGearStat(stats, statID, delta: value);
+
+					// Track this item.
+					melds++;
+
+					if (!MateriaCount.ContainsKey(materiaItem))
+						MateriaCount[materiaItem] = 1;
+					else
+						MateriaCount[materiaItem]++;
+				}
 			}
 
 			if (melds < item.MateriaSlotCount)
