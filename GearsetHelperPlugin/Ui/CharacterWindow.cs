@@ -1,15 +1,9 @@
 using Dalamud;
 
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Enums;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-
-using GearsetHelperPlugin.Models;
-
-using DStatus = Dalamud.Game.ClientState.Statuses.Status;
-using FFXIVClientStructs.FFXIV.Client.Game.Group;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -22,7 +16,7 @@ internal class CharacterWindow : BaseWindow {
 	}
 
 	public override void Dispose(bool disposing) {
-		
+
 	}
 
 	protected override void OnVisibleChange() {
@@ -40,7 +34,7 @@ internal class CharacterWindow : BaseWindow {
 		}
 
 		var charAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("Character", 1);
-		if (charAddon is null || ! charAddon->IsVisible) {
+		if (charAddon is null || !charAddon->IsVisible) {
 			SelectedFood = null;
 			SelectedMedicine = null;
 			SelectedGroupBonus = 0;
@@ -69,7 +63,7 @@ internal class CharacterWindow : BaseWindow {
 		return true;
 	}
 
-	protected override unsafe PlayerCharacter? GetActor() {
+	protected override unsafe IPlayerCharacter? GetActor() {
 		// The local player is easy to deal with.
 		return Ui.Plugin.ClientState.LocalPlayer;
 	}

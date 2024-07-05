@@ -1,13 +1,13 @@
+using System;
+
 using Dalamud.Configuration;
 using Dalamud.Plugin;
-using System;
 
 namespace GearsetHelperPlugin;
 
 [Serializable]
-public class Configuration : IPluginConfiguration
-{
-    public int Version { get; set; } = 0;
+public class Configuration : IPluginConfiguration {
+	public int Version { get; set; } = 0;
 
 	public string? EtroApiKey { get; set; } = null;
 	public string? EtroRefreshKey { get; set; } = null;
@@ -32,18 +32,16 @@ public class Configuration : IPluginConfiguration
 	public int AttachSideExamine { get; set; } = 1;
 	public int AttachSideCharacter { get; set; } = 1;
 
-    // the below exist just to make saving less cumbersome
+	// the below exist just to make saving less cumbersome
 
-    [NonSerialized]
-    private DalamudPluginInterface? pluginInterface;
+	[NonSerialized]
+	private IDalamudPluginInterface? pluginInterface;
 
-    public void Initialize(DalamudPluginInterface pluginInterface)
-    {
-        this.pluginInterface = pluginInterface;
-    }
+	public void Initialize(IDalamudPluginInterface pluginInterface) {
+		this.pluginInterface = pluginInterface;
+	}
 
-    public void Save()
-    {
-        pluginInterface!.SavePluginConfig(this);
-    }
+	public void Save() {
+		pluginInterface!.SavePluginConfig(this);
+	}
 }

@@ -1,18 +1,12 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 
 using Dalamud;
-
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Enums;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-
-using GearsetHelperPlugin.Models;
-
-using DStatus = Dalamud.Game.ClientState.Statuses.Status;
 
 namespace GearsetHelperPlugin.Ui;
 
@@ -23,13 +17,13 @@ internal class ExamineWindow : BaseWindow {
 	protected override string Name => Localization.Localize("gui.examine", "Examine");
 
 	internal ExamineWindow(PluginUI ui) : base(ui) {
-		Ui.Plugin.Functions.ExamineOnRefresh += ExamineRefreshed;
+		//Ui.Plugin.Functions.ExamineOnRefresh += ExamineRefreshed;
 
 		Visible = Ui.Plugin.Config.ExamineOpen;
 	}
 
 	public override void Dispose(bool disposing) {
-		Ui.Plugin.Functions.ExamineOnRefresh -= ExamineRefreshed;
+		//Ui.Plugin.Functions.ExamineOnRefresh -= ExamineRefreshed;
 	}
 
 	private void ExamineRefreshed(ushort menuId, int val, uint loadStage) {
@@ -84,19 +78,19 @@ internal class ExamineWindow : BaseWindow {
 		return examineLoadStage >= 4;
 	}
 
-	protected override unsafe PlayerCharacter? GetActor() {
+	protected override unsafe IPlayerCharacter? GetActor() {
 		// TODO: Rewrite this entire method, and probably factor it out.
 
 		var examineAddon = (AtkUnitBase*) Ui.Plugin.GameGui.GetAddonByName("CharacterInspect", 1);
 		if (examineAddon == null || !examineAddon->IsVisible)
 			return null;
 
-		Lazy<Dictionary<string, PlayerCharacter>> players = new(() => {
+		Lazy<Dictionary<string, IPlayerCharacter>> players = new(() => {
 			var rawPlayers = Ui.Plugin.ObjectTable
-				.Where(obj => obj is PlayerCharacter && obj.IsValid())
-				.Cast<PlayerCharacter>();
+				.Where(obj => obj is IPlayerCharacter && obj.IsValid())
+				.Cast<IPlayerCharacter>();
 
-			var result = new Dictionary<string, PlayerCharacter>();
+			var result = new Dictionary<string, IPlayerCharacter>();
 
 			foreach (var entry in rawPlayers) {
 				string name = entry.Name.TextValue;
@@ -115,7 +109,7 @@ internal class ExamineWindow : BaseWindow {
 			if (obj == null)
 				continue;
 
-			if (!obj->IsVisible || obj->Type != NodeType.Text)
+			if (!obj->IsVisible() || obj->Type != NodeType.Text)
 				continue;
 
 			var txt = obj->GetAsAtkTextNode();
@@ -124,7 +118,7 @@ internal class ExamineWindow : BaseWindow {
 
 			string? result = txt->NodeText.ToString();
 
-			if (!string.IsNullOrEmpty(result) && players.Value.TryGetValue(result, out PlayerCharacter? player))
+			if (!string.IsNullOrEmpty(result) && players.Value.TryGetValue(result, out IPlayerCharacter? player))
 				return player;
 		}
 

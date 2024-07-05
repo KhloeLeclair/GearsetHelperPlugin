@@ -1,8 +1,8 @@
 using System;
 
-using FFXIVClientStructs.FFXIV.Component.GUI;
-
 using Dalamud.Hooking;
+
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GearsetHelperPlugin;
 
@@ -37,7 +37,7 @@ internal class GameFunctions : IDisposable {
 		try {
 			AtkUnitBase* baseAs = (AtkUnitBase*) basePtr;
 
-			ushort id = ((AtkUnitBase*) basePtr)->ID;
+			ushort id = ((AtkUnitBase*) basePtr)->Id;
 			uint load = ((AtkValue*) loadPtr)->UInt;
 
 			ExamineOnRefresh?.Invoke(id, (int) a2, load);

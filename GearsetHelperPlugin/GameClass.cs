@@ -1,8 +1,8 @@
-using Lumina.Excel.GeneratedSheets;
 using System.Collections.Generic;
 
 using GearsetHelperPlugin.Sheets;
-using System.Data;
+
+using Lumina.Excel.GeneratedSheets;
 
 namespace GearsetHelperPlugin;
 
@@ -47,7 +47,9 @@ internal enum GameClass : byte {
 	Gunbreaker = 37,
 	Dancer = 38,
 	Reaper = 39,
-	Sage = 40
+	Sage = 40,
+	Viper = 41,
+	Pictomancer = 42
 }
 
 
@@ -73,7 +75,7 @@ internal static partial class Data {
 
 	public static bool IsCrafter(this ClassJob job) => job.ClassJobCategory.Row == 33;
 
-	public static bool IsGatherer(this ClassJob job) => job.ClassJobCategory.Row == 32;	
+	public static bool IsGatherer(this ClassJob job) => job.ClassJobCategory.Row == 32;
 
 	public static bool IsTank(this ClassJob job) => job.Role == 1;
 
@@ -117,12 +119,12 @@ internal static partial class Data {
 		GameClass? parent = job.ToParentJob();
 		uint? parentId = parent.HasValue ? (uint) parent.Value : null;
 
-		foreach(var action in ActionSheet) {
+		foreach (var action in ActionSheet) {
 			if (action.IsPvP || !action.IsPlayerAction || action.ClassJobLevel > level)
 				continue;
 
 			uint row = action.ClassJob.Row;
-			if ( row == jobId || (parentId.HasValue && parentId.Value == row) )
+			if (row == jobId || (parentId.HasValue && parentId.Value == row))
 				yield return action;
 		}
 	}
@@ -333,7 +335,7 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 				1100, // Communio
 			};
 
-		// Let me play you the song of my people in limsa using a bot
+		// Let me play you the song of my people (in limsa (using a bot))
 		if (job == GameClass.Archer || job == GameClass.Bard)
 			return new int[] {
 				100, // Base
@@ -421,6 +423,35 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 				600,
 				680,
 				750
+			};
+
+		// I gotta tell you, this is pretty terrific.
+		if (job == GameClass.Viper)
+			return new int[] {
+				100,
+				200,
+				260,
+				360,
+				450,
+				500,
+				600,
+				700,
+				1050
+			};
+
+		// no one hires you with an art degree I am now a mercenary
+		if (job == GameClass.Pictomancer)
+			return new int[] {
+				100,
+				160,
+				240,
+				440,
+				480,
+				560,
+				800,
+				840,
+				1100,
+				1300
 			};
 
 		return YieldSamplePotencies();

@@ -193,7 +193,7 @@ internal class SettingsWindow : Window, IDisposable {
 				}
 			}
 
-		} else { 
+		} else {
 			if (LoginTask.IsCompleted) {
 				if (!string.IsNullOrEmpty(LoginTask.Result.ApiKey)) {
 					Config.EtroApiKey = LoginTask.Result.ApiKey;

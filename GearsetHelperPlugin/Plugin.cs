@@ -11,15 +11,14 @@ using Dalamud.Plugin.Services;
 
 namespace GearsetHelperPlugin;
 
-public class Plugin : IDalamudPlugin
-{
+public sealed class Plugin : IDalamudPlugin {
 	internal static Plugin INSTANCE { get; private set; } = null!;
 
 	internal const string PluginName = "Gearset Helper";
 	public string Name => PluginName;
 
 	[PluginService]
-	internal DalamudPluginInterface Interface { get; init; }
+	internal IDalamudPluginInterface Interface { get; init; }
 
 	[PluginService]
 	internal IChatGui ChatGui { get; init; }
@@ -57,7 +56,7 @@ public class Plugin : IDalamudPlugin
 	[PluginService]
 	internal IPluginLog Logger { get; init; }
 
-	internal GameFunctions Functions { get; }
+	//internal GameFunctions Functions { get; }
 
 	internal Localization Localization { get; }
 
@@ -65,7 +64,7 @@ public class Plugin : IDalamudPlugin
 	internal PluginUI Ui { get; }
 	internal Exporter Exporter { get; }
 
-	#pragma warning disable 8618
+#pragma warning disable 8618
 	public Plugin() {
 		INSTANCE = this;
 
@@ -86,18 +85,17 @@ public class Plugin : IDalamudPlugin
 		Data.LoadSheets(DataManager!.Excel);
 		Data.LoadFoodAsync();
 
-		Functions = new GameFunctions(this);
+		//Functions = new GameFunctions(this);
 		Exporter = new Exporter(this);
 		Ui = new PluginUI(this);
 
 	}
-	#pragma warning restore 8618
+#pragma warning restore 8618
 
-	public void Dispose()
-    {
+	public void Dispose() {
 		Ui.Dispose();
 		Exporter.Dispose();
-		Functions.Dispose();
-    }
+		//Functions.Dispose();
+	}
 
 }

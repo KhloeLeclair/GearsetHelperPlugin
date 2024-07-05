@@ -1,31 +1,27 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 
 using Dalamud;
-
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
-
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Textures;
+using Dalamud.Interface.Utility;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
+
+using GearsetHelperPlugin.Models;
+using GearsetHelperPlugin.Sheets;
 
 using ImGuiNET;
 
 using Lumina.Excel.GeneratedSheets;
-
-using GearsetHelperPlugin.Models;
-using GearsetHelperPlugin.Sheets;
-using Dalamud.Interface.Internal;
-
-using Dalamud.Plugin.Services;
-using Dalamud.Interface.Utility;
-using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Enums;
 
 using DStatus = Dalamud.Game.ClientState.Statuses.Status;
 
@@ -50,9 +46,6 @@ internal abstract class BaseWindow : IDisposable {
 	protected PluginUI Ui { get; }
 	protected abstract string Name { get; }
 
-	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIcons = new();
-	private readonly Dictionary<uint, IDalamudTextureWrap?> ItemIconsHQ = new();
-
 	protected EquipmentSet? CachedSet;
 	protected Food? SelectedFood;
 	protected Food? SelectedMedicine;
@@ -65,8 +58,8 @@ internal abstract class BaseWindow : IDisposable {
 	private string MedicineFilter = string.Empty;
 	private bool MedicineFocused = false;
 
-	protected byte SelectedLevelSync = 90;
-	protected uint SelectedIlvlSync = 665;
+	protected byte SelectedLevelSync = 100;
+	protected uint SelectedIlvlSync = 795;
 
 	protected uint SelectedGroupBonus = 0;
 
@@ -96,21 +89,11 @@ internal abstract class BaseWindow : IDisposable {
 	public void Dispose() {
 		Dispose(true);
 
-		foreach (var entry in ItemIcons)
-			entry.Value?.Dispose();
-
-		foreach (var entry in ItemIconsHQ)
-			entry.Value?.Dispose();
-
-		ItemIcons.Clear();
-		ItemIconsHQ.Clear();
-
 		CachedSet = null;
 		SelectedFood = null;
 		SelectedMedicine = null;
 
-		if (ExportTask is not null)
-			ExportTask.Dispose();
+		ExportTask?.Dispose();
 	}
 
 	public virtual void Dispose(bool disposing) {
@@ -123,21 +106,21 @@ internal abstract class BaseWindow : IDisposable {
 
 	#region Calculate Party Bonus
 
-	protected void RecalculatePartyBonus(PlayerCharacter player) {
+	protected void RecalculatePartyBonus(IPlayerCharacter player) {
 		if (!Ui.Plugin.Config.CharacterAutoPartyBonus)
 			return;
 
-		HashSet<string> roles = new();
+		HashSet<string> roles = [];
 
 		bool encountered = false;
 		int members = 0;
 
-		foreach(var member in Ui.Plugin.PartyList) {
+		foreach (var member in Ui.Plugin.PartyList) {
 			//Ui.Plugin.Logger.Debug($"Party Member: {member.Name} {member}");
 			if (member.ClassJob.GameData is null)
 				continue;
 
-			if ( player.ObjectId == member.ObjectId )
+			if (member.GameObject != null && player.EntityId == member.GameObject.EntityId)
 				encountered = true;
 
 			members++;
@@ -157,8 +140,7 @@ internal abstract class BaseWindow : IDisposable {
 				Ui.Plugin.Logger.Debug($"What job is {member.Name}? {member.ClassJob.Id}");*/
 		}
 
-		string entries = string.Join(", ", roles);
-
+		//string entries = string.Join(", ", roles);
 		//Ui.Plugin.Logger.Debug($"Enc: {encountered}, count: {members}, Roles: {entries}");
 
 		uint bonus;
@@ -180,41 +162,14 @@ internal abstract class BaseWindow : IDisposable {
 
 	#region Icons
 
-	protected IDalamudTextureWrap? GetIcon(Item? item, bool hq = false) {
+	protected ISharedImmediateTexture? GetIcon(Item? item, bool hq = false) {
 		if (item is not null)
 			return GetIcon(item.Icon, hq);
 		return null;
 	}
 
-	protected IDalamudTextureWrap? GetIcon(uint id, bool hq = false) {
-		if (hq) {
-			if (ItemIconsHQ.TryGetValue(id, out var icon))
-				return icon;
-
-			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.ItemHighQuality | ITextureProvider.IconFlags.HiRes);
-			//icon = Ui.Plugin.DataManager.GetImGuiTextureHqIcon(id);
-			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
-				Ui.Plugin.Logger.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
-				icon = null;
-			}
-
-			ItemIconsHQ[id] = icon;
-			return icon;
-
-		} else {
-			if (ItemIcons.TryGetValue(id, out var icon))
-				return icon;
-
-			icon = Ui.Plugin.TextureProvider.GetIcon(id, ITextureProvider.IconFlags.HiRes);
-			//icon = Ui.Plugin.DataManager.GetImGuiTextureIcon(id);
-			if (icon is not null && icon.ImGuiHandle == IntPtr.Zero) {
-				Ui.Plugin.Logger.Warning($"Got zero pointer icon for item {id} (hq:{hq})");
-				icon = null;
-			}
-
-			ItemIcons[id] = icon;
-			return icon;
-		}
+	protected ISharedImmediateTexture GetIcon(uint id, bool hq = false) {
+		return Ui.Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(id, hq));
 	}
 
 	#endregion
@@ -245,7 +200,7 @@ internal abstract class BaseWindow : IDisposable {
 			UpdateFoodData(set, player, false);
 	}
 
-	protected virtual void UpdateFoodData(EquipmentSet? set = null, PlayerCharacter? player = null, bool update = true) {
+	protected virtual void UpdateFoodData(EquipmentSet? set = null, IPlayerCharacter? player = null, bool update = true) {
 		set ??= CachedSet;
 		if (set is null)
 			return;
@@ -272,7 +227,7 @@ internal abstract class BaseWindow : IDisposable {
 			}
 	}
 
-	private static DStatus[]? GetStatuses(PlayerCharacter? player) {
+	private static DStatus[]? GetStatuses(IPlayerCharacter? player) {
 		if (player is null)
 			return null;
 
@@ -298,7 +253,7 @@ internal abstract class BaseWindow : IDisposable {
 		return result;
 	}
 
-	protected abstract PlayerCharacter? GetActor();
+	protected abstract IPlayerCharacter? GetActor();
 
 	protected unsafe void UpdateEquipmentSet() {
 		if (!HasEquipment()) {
@@ -316,9 +271,10 @@ internal abstract class BaseWindow : IDisposable {
 			bool match = true;
 			int idx = 0;
 
-			for(uint i = 0; i < inventory->Size; i++) {
+			for (uint i = 0; i < inventory->Size; i++) {
 				var item = inventory->Items[i];
-				if (item.ItemID == 0)
+				uint id = item.ItemId;
+				if (id == 0)
 					continue;
 
 				if (idx >= CachedSet.Items.Count) {
@@ -327,19 +283,19 @@ internal abstract class BaseWindow : IDisposable {
 				}
 
 				MeldedItem mitem = CachedSet.Items[idx];
-				if (mitem.ID != item.ItemID) {
+				if (mitem.ID != id) {
 					match = false;
 					break;
 				}
 
-				if (item.Flags.HasFlag(InventoryItem.ItemFlags.HQ) != mitem.HighQuality) {
+				if (item.Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) != mitem.HighQuality) {
 					match = false;
 					break;
 				}
 
 				for (int j = 0; j < 5; j++) {
 					var mat = mitem.Melds[j];
-					if (mat.ID != item.Materia[j] && mat.Grade != item.MateriaGrade[j]) {
+					if (mat.ID != item.Materia[j] && mat.Grade != item.MateriaGrades[j]) {
 						match = false;
 						break;
 					}
@@ -369,7 +325,7 @@ internal abstract class BaseWindow : IDisposable {
 
 		EquipmentSet result = new(items);
 
-		result.Level = 90;
+		result.Level = 100;
 
 		UpdatePlayerData(result);
 
@@ -397,22 +353,23 @@ internal abstract class BaseWindow : IDisposable {
 		if (inventory == null)
 			return null;
 
-		List<MeldedItem> result = new();
+		List<MeldedItem> result = [];
 
 		for (uint i = 0; i < inventory->Size; i++) {
 			var item = inventory->Items[i];
-			if (item.ItemID == 0)
+			uint id = item.ItemId;
+			if (id == 0)
 				continue;
 
 			result.Add(new MeldedItem(
-				ID: item.ItemID,
-				HighQuality: item.Flags.HasFlag(InventoryItem.ItemFlags.HQ),
+				ID: id,
+				HighQuality: item.Flags.HasFlag(InventoryItem.ItemFlags.HighQuality),
 				Melds: new MeldedMateria[] {
-					new MeldedMateria(item.Materia[0], item.MateriaGrade[0]),
-					new MeldedMateria(item.Materia[1], item.MateriaGrade[1]),
-					new MeldedMateria(item.Materia[2], item.MateriaGrade[2]),
-					new MeldedMateria(item.Materia[3], item.MateriaGrade[3]),
-					new MeldedMateria(item.Materia[4], item.MateriaGrade[4]),
+					new(item.Materia[0], item.MateriaGrades[0]),
+					new(item.Materia[1], item.MateriaGrades[1]),
+					new(item.Materia[2], item.MateriaGrades[2]),
+					new(item.Materia[3], item.MateriaGrades[3]),
+					new(item.Materia[4], item.MateriaGrades[4]),
 				}
 			));
 		}
@@ -519,7 +476,7 @@ internal abstract class BaseWindow : IDisposable {
 			if (start < 1)
 				start = 1;
 
-			for(int i = start - 1; i < end; i++) {
+			for (int i = start - 1; i < end; i++) {
 				Food food = visible[i];
 				ExtendedItem? item = food.ItemRow();
 				if (item is null)
@@ -541,14 +498,14 @@ internal abstract class BaseWindow : IDisposable {
 				var newPos = ImGui.GetCursorPos();
 				ImGui.SetCursorPos(oldPos);
 
-				var image = GetIcon(item.Icon, food.HQ);
+				var image = GetIcon(item.Icon, food.HQ).GetWrapOrEmpty();
 				int width = 0;
 				if (image != null) {
 					width = image.Width;
 					int height = image.Height;
 
-					if ( height > size.Y ) {
-						float scale = (float)size.Y / height;
+					if (height > size.Y) {
+						float scale = (float) size.Y / height;
 						width = (int) (width * scale);
 						height = (int) (height * scale);
 					}
@@ -598,7 +555,7 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	protected void DrawWindow(bool attach, int side, short x, short y, ushort width) {
-		if (! Data.IsFoodLoaded)
+		if (!Data.IsFoodLoaded)
 			return;
 
 		UpdateEquipmentSet();
@@ -717,7 +674,7 @@ internal abstract class BaseWindow : IDisposable {
 			if (ImGui.CollapsingHeader(Localization.Localize("gui.food-sync", "Food / Sync Down"), ImGuiTreeNodeFlags.None)) {
 				int levelsync = SelectedLevelSync;
 				if (ImGui.InputInt(Localization.Localize("gui.level-sync", "Level Sync"), ref levelsync, 1, 10)) {
-					SelectedLevelSync = (byte) Math.Clamp(levelsync, 1, 90);
+					SelectedLevelSync = (byte) Math.Clamp(levelsync, 1, 100);
 					if (CachedSet.UpdateSync(SelectedLevelSync, 0))
 						CachedSet.Recalculate();
 					SelectedIlvlSync = CachedSet.ILvlSync;
@@ -728,7 +685,7 @@ internal abstract class BaseWindow : IDisposable {
 
 				int ilvlsync = (int) (SelectedIlvlSync == 0 ? CachedSet.ILvlSync : SelectedIlvlSync);
 				if (ImGui.InputInt(Localization.Localize("gui.ilvl-sync", "Item Level Sync"), ref ilvlsync, 5, 10)) {
-					SelectedIlvlSync = (uint) Math.Clamp(ilvlsync, 5, 665);
+					SelectedIlvlSync = (uint) Math.Clamp(ilvlsync, 5, 795);
 					if (CachedSet.UpdateSync(SelectedLevelSync, SelectedIlvlSync))
 						CachedSet.Recalculate();
 				}
@@ -844,7 +801,7 @@ internal abstract class BaseWindow : IDisposable {
 						ExtendedItem? item = entry.Item1;
 						ImGui.TableNextRow();
 
-						IDalamudTextureWrap? icon = GetIcon(item);
+						var icon = GetIcon(item)?.GetWrapOrEmpty();
 						int height = icon == null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 
 						ImGui.TableSetColumnIndex(0);
@@ -896,7 +853,7 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.Spacing();
 					}
 
-					IDalamudTextureWrap? icon = GetIcon(item, rawItem.HighQuality);
+					var icon = GetIcon(item, rawItem.HighQuality)?.GetWrapOrEmpty();
 					int height = icon is null ? 0 : Math.Min(icon.Height, (int) (32 * scale));
 					if (icon != null) {
 						ImGui.Image(icon.ImGuiHandle, new Vector2(height, height));
@@ -910,6 +867,10 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.SameLine();
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
+					} else if (item.ExtendedItemLevel.Value is ExtendedItemLevel level) {
+						ImGui.SameLine();
+						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
+						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(i{level.RowId})");
 					}
 
 					ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 32);
@@ -930,7 +891,13 @@ internal abstract class BaseWindow : IDisposable {
 			OnVisibleChange();
 	}
 
+	internal static void DrawOutdatedMathWarning() {
+		ImGui.TextWrapped(Localization.Localize("gui.outdated-math", "The formulas used to calculate these values have not been updated for Dawntrail yet, so they may not be accurate."));
+	}
+
 	internal static void DrawCalculatedTable(IEnumerable<CalculatedStat> calculated) {
+		DrawOutdatedMathWarning();
+
 		ImGui.BeginTable("CalcTable", 2, ImGuiTableFlags.RowBg);
 
 		/*ImGui.TableSetupColumn(Localization.Localize("gui.name", "Name"), ImGuiTableColumnFlags.WidthStretch, 1f);
@@ -953,6 +920,8 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	internal static void DrawDamageTable(IEnumerable<KeyValuePair<int, DamageValues>> data) {
+		DrawOutdatedMathWarning();
+
 		ImGui.BeginTable("DamageTable", 6, ImGuiTableFlags.Resizable | ImGuiTableFlags.RowBg);
 
 		ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
@@ -1104,7 +1073,7 @@ internal abstract class BaseWindow : IDisposable {
 
 			if (ImGui.IsItemHovered()) {
 				//if (string.IsNullOrEmpty(param.Description))
-					ImGui.SetTooltip(param.Name);
+				ImGui.SetTooltip(param.Name);
 				/*else
 					ImGui.SetTooltip($"{param.Name}\n\n{param.Description}");*/
 			}

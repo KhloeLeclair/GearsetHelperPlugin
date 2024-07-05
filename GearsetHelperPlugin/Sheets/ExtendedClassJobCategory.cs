@@ -8,7 +8,7 @@ namespace GearsetHelperPlugin.Sheets;
 [Sheet("ClassJobCategory")]
 public class ExtendedClassJobCategory : BaseParam {
 
-	public readonly bool[] Classes = new bool[41];
+	public readonly bool[] Classes = new bool[43];
 
 	public override void PopulateData(RowParser parser, GameData gameData, Language language) {
 		base.PopulateData(parser, gameData, language);
