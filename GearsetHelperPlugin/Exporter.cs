@@ -8,13 +8,13 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using GearsetHelperPlugin.Models;
+using GearsetHelperPlugin.Sheets;
 
 using Lumina.Excel.GeneratedSheets;
 
-using GearsetHelperPlugin.Models;
-using GearsetHelperPlugin.Sheets;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GearsetHelperPlugin;
 
@@ -47,6 +47,9 @@ internal class Exporter : IDisposable {
 		return Task.Run(() => Task_ExportTeamcraft(gearset));
 	}
 
+	public Task<ExportResponse> ExportXivGear(EquipmentSet gearset) {
+		return Task.Run(() => Task_ExportXIVGear(gearset));
+	}
 
 	public Task<ExportResponse> ExportEtro(EquipmentSet gearset) {
 		return Task.Run(() => Task_ExportEtro(gearset));
@@ -73,9 +76,151 @@ internal class Exporter : IDisposable {
 	}
 
 	internal class ExportResponse {
+		public bool ShowSuccess { get; set; } = true;
+		public string? Instructions { get; set; }
+		public string? Clipboard { get; set; }
 		public string? Url { get; set; }
 		public string? Error { get; set; }
 	}
+
+	#region XIVGear Export
+
+	private static readonly Dictionary<uint, string?> XIVGEAR_SLOT_MAP = new() {
+		[1] = "Weapon",
+		[2] = "OffHand",
+		[13] = "Weapon",
+		[3] = "Head",
+		[4] = "Body",
+		[5] = "Hand",
+		[7] = "Legs",
+		[8] = "Feet",
+		[9] = "Ears",
+		[10] = "Neck",
+		[11] = "Wrist",
+		[12] = null, // "RingLeft|RingRight",
+		[17] = null
+	};
+
+	private ExportResponse Task_ExportXIVGear(EquipmentSet gearset) {
+		ExportResponse result = new();
+
+		try {
+			Plugin.Logger.Info("Exporting gearset to XivGear.");
+
+			var jobData = gearset.JobRow();
+			if (jobData == null) {
+				result.Error = "Unable to detect class.";
+				return result;
+			}
+
+			string job = jobData.Abbreviation.ToString().ToUpper();
+			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name) ?? "Job";
+
+			string name = $"i{gearset.ItemLevel} {jobName}";
+			if (!string.IsNullOrEmpty(gearset.PlayerName))
+				name = $"{name} ({gearset.PlayerName})";
+
+			if (name.Length > 30)
+				name = name[..30];
+
+			var items = new JObject();
+
+			var set = new JObject() {
+				{ "name", name },
+				{ "items", items },
+			};
+
+			if (gearset.Food != null)
+				set.Add("food", gearset.Food.ItemID);
+
+			bool had_right = false;
+
+			foreach (var rawItem in gearset.Items) {
+				ExtendedItem? item = rawItem.Row();
+				if (item == null)
+					continue;
+
+				uint slot = item.EquipSlotCategory.Row;
+				string? mappedSlot;
+				if (slot == 12) {
+					mappedSlot = had_right ? "RingLeft" : "RingRight";
+					had_right = true;
+
+				} else if (!XIVGEAR_SLOT_MAP.TryGetValue(slot, out mappedSlot)) {
+					Plugin.Logger.Warning($"Unknown Slot for Item: {item.Name} -- Slot: {slot}");
+					continue;
+				}
+
+				if (mappedSlot == null)
+					continue;
+
+				var encodedItem = new JObject();
+				var melds = new JArray();
+
+				encodedItem.Add("id", rawItem.ID);
+				encodedItem.Add("materia", melds);
+
+				items.Add(mappedSlot, encodedItem);
+
+				foreach (var raw in rawItem.Melds) {
+					if (raw.ID == 0)
+						continue;
+
+					var materia = raw.Row();
+					if (materia == null || raw.Grade >= materia.Item.Length)
+						continue;
+
+					var mitem = materia.Item[raw.Grade]?.Value;
+					if (mitem == null)
+						continue;
+
+					melds.Add(new JObject() {
+						{ "id", mitem.RowId }
+					});
+				}
+			}
+
+			if (gearset.Food is not null)
+				items.Add("food", gearset.Food.ItemID);
+
+			if (!ARIYALA_RACE_ID_MAP.TryGetValue(gearset.Tribe, out uint race))
+				race = 0;
+
+			var inv = new JArray(gearset.Items.Select(x => x.ID).ToArray());
+			if (gearset.Food is not null)
+				inv.Add(gearset.Food.ItemID);
+
+			int level = gearset.EffectiveLevel;
+			if (level < 90) level = 90;
+			if (level > 90) level = 100;
+
+			var obj = new JObject {
+				{ "name", name },
+				{ "sets", new JArray() { set } },
+				{ "level", level },
+				{ "job", job },
+				{ "partyBonus", (int) Math.Floor(gearset.GroupBonus * 100) },
+			};
+
+			// We don't include the tribe because they have mapped the data in a very
+			// stupid way. Users can set this themselves.
+			//if (gearset.TribeRow() is Tribe tribe)
+			//	obj.Add("race", tribe.Masculine.ToString());
+
+			result.ShowSuccess = false;
+			result.Instructions = Dalamud.Localization.Localize("export.visit-xivgear", "Visit the provided URL and paste the JSON below to import your gearset into XivGear.");
+			result.Url = "https://xivgear.app/?page=importsheet";
+			result.Clipboard = obj.ToString(Formatting.Indented);
+
+		} catch (Exception ex) {
+			Plugin.Logger.Error($"An error occurred while exporting gearset to XivGear.\nDetails: {ex}");
+			result.Error = "An error occurred. See the log for details.";
+		}
+
+		return result;
+	}
+
+	#endregion
 
 	#region Teamcraft Export
 
@@ -92,10 +237,7 @@ internal class Exporter : IDisposable {
 				if (cat is null || cat.SoulCrystal == 1)
 					continue;
 
-				if (items.ContainsKey(item.ID))
-					items[item.ID]++;
-				else
-					items[item.ID] = 1;
+				items[item.ID] = items.GetValueOrDefault(item.ID) + 1;
 			}
 
 			if (gearset.Food is not null)
@@ -454,6 +596,8 @@ internal class Exporter : IDisposable {
 		"NIN",
 		"SAM",
 		"RPR",
+		"VPR",
+		"PCT",
 
 		"BRD",
 		"MCH",
@@ -526,7 +670,7 @@ internal class Exporter : IDisposable {
 			uint minIlvl = 999;
 			uint maxIlvl = 1;
 
-			int minLevel = 90;
+			int minLevel = 100;
 			int maxLevel = 1;
 
 			bool had_right = false;
@@ -599,12 +743,12 @@ internal class Exporter : IDisposable {
 					["normal"] = new JObject() {
 						["items"] = items,
 						["materiaData"] = materiaData,
-						["bonusStats"] = new JObject() {}
+						["bonusStats"] = new JObject() { }
 					},
 					["base"] = new JObject() {
 						["items"] = new JObject(),
 						["materiaData"] = new JObject(),
-						["bonusStats"] = new JObject() {}
+						["bonusStats"] = new JObject() { }
 					}
 				}
 			};

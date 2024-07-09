@@ -62,6 +62,8 @@ internal enum Stat {
 	Control = 71,
 	Gathering = 72,
 	Perception = 73,
+
+	GCD = int.MaxValue
 }
 
 

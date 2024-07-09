@@ -36,6 +36,9 @@ public sealed class Plugin : IDalamudPlugin {
 	internal IDataManager DataManager { get; init; }
 
 	[PluginService]
+	internal INotificationManager NotificationManager { get; init; }
+
+	[PluginService]
 	internal IFramework Framework { get; init; }
 
 	[PluginService]

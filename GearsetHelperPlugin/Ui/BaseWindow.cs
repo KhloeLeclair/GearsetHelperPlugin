@@ -633,14 +633,59 @@ internal abstract class BaseWindow : IDisposable {
 					ImGui.TextColored(ImGuiColors.DalamudYellow, Localization.Localize("gui.error", "Error:"));
 					ImGui.TextWrapped(ExportResponse.Error);
 				} else {
-					ImGui.TextColored(ImGuiColors.ParsedGreen, Localization.Localize("gui.export-success", "Export Successful!"));
+					if (ExportResponse.ShowSuccess)
+						ImGui.TextColored(ImGuiColors.ParsedGreen, Localization.Localize("gui.export-success", "Export Successful!"));
+					if (!string.IsNullOrWhiteSpace(ExportResponse.Instructions))
+						ImGui.TextWrapped(ExportResponse.Instructions);
+
 					string url = ExportResponse.Url ?? string.Empty;
-					ImGui.InputText(Localization.Localize("gui.url", "URL"), ref url, (uint) url.Length, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.ReadOnly);
+					if (!string.IsNullOrWhiteSpace(url)) {
+						ImGui.InputText(Localization.Localize("gui.url", "URL"), ref url, (uint) url.Length, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.ReadOnly);
 
-					if (ImGui.Button(Localization.Localize("gui.open-browser", "Open in Browser")))
-						Exporter.TryOpenURL(ExportResponse.Url!);
+						ImGui.SameLine();
+						ImGui.PushID($"copy-to-clipboard#url");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Clipboard)) {
+							ImGui.SetClipboardText(url);
 
-					ImGui.SameLine();
+							string msg = Localization.Localize("gui.copied-to-clipboard", "Copied to Clipboard");
+							Ui.Plugin.NotificationManager.AddNotification(new() {
+								MinimizedText = msg,
+								Content = msg,
+								Type = Dalamud.Interface.ImGuiNotification.NotificationType.Success
+							});
+						}
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.copy-to-clipboard", "Copy to Clipboard"));
+
+						ImGui.PopID();
+
+						if (ImGui.Button(Localization.Localize("gui.open-browser", "Open in Browser")))
+							Exporter.TryOpenURL(ExportResponse.Url!);
+					}
+
+					string json = ExportResponse.Clipboard ?? string.Empty;
+					if (!string.IsNullOrWhiteSpace(json)) {
+						ImGui.InputTextMultiline(Localization.Localize("gui.json", "JSON"), ref json, (uint) url.Length, Vector2.Zero, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.ReadOnly);
+
+						ImGui.SameLine();
+						ImGui.PushID($"copy-to-clipboard#json");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Clipboard)) {
+							ImGui.SetClipboardText(json);
+
+							string msg = Localization.Localize("gui.copied-to-clipboard", "Copied to Clipboard");
+							Ui.Plugin.NotificationManager.AddNotification(new() {
+								MinimizedText = msg,
+								Content = msg,
+								Type = Dalamud.Interface.ImGuiNotification.NotificationType.Success
+							});
+						}
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.copy-to-clipboard", "Copy to Clipboard"));
+
+						ImGui.PopID();
+					}
+
+					//ImGui.SameLine();
 				}
 
 				if (ImGui.Button(Localization.Localize("gui.done", "Done")))
@@ -663,11 +708,17 @@ internal abstract class BaseWindow : IDisposable {
 				if (ImGui.Button("Teamcraft (List)"))
 					ExportTask = Ui.Plugin.Exporter.ExportTeamcraft(CachedSet);
 
+				ImGui.SameLine();
+				if (ImGui.Button("XivGear"))
+					ExportTask = Ui.Plugin.Exporter.ExportXivGear(CachedSet);
+
 				ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 32);
 
 				ImGui.PushID($"opensettings");
 				if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
 					Ui.OpenConfig();
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("gui.settings", "Gearset Helper Settings"));
 				ImGui.PopID();
 			}
 
@@ -716,6 +767,18 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.PushID("food#link");
 						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
 							Ui.Plugin.ChatGui.LinkItem(SelectedFood.ItemRow(), SelectedFood.HQ);
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
+						ImGui.PopID();
+
+						ImGui.SameLine();
+						ImGui.PushID("food#clear");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash)) {
+							SelectedFood = null;
+							CachedSet.UpdateFood(null);
+						}
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.remove-this", "Remove"));
 						ImGui.PopID();
 					}
 				}
@@ -739,13 +802,25 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.PushID("medicine#link");
 						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
 							Ui.Plugin.ChatGui.LinkItem(SelectedMedicine.ItemRow(), SelectedMedicine.HQ);
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
+						ImGui.PopID();
+
+						ImGui.SameLine();
+						ImGui.PushID("medicine#clear");
+						if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash)) {
+							SelectedMedicine = null;
+							CachedSet.UpdateMedicine(null);
+						}
+						if (ImGui.IsItemHovered())
+							ImGui.SetTooltip(Localization.Localize("gui.remove-this", "Remove"));
 						ImGui.PopID();
 					}
 				}
 			}
 
 			if (ImGui.CollapsingHeader(Localization.Localize("gui.attributes", "Attributes"), ImGuiTreeNodeFlags.DefaultOpen)) {
-				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: (CachedSet.Food is not null || CachedSet.Medicine is not null), includeBonus: SelectedGroupBonus != 0);
+				DrawStatTable(CachedSet.Attributes.Values, CachedSet.Params, true, includeTiers: true, includeFood: (CachedSet.Food is not null || CachedSet.Medicine is not null), includeBonus: SelectedGroupBonus != 0, gcd: CachedSet.GCD);
 			}
 
 			if (CachedSet.DamageValues.Count > 0 && ImGui.CollapsingHeader(Localization.Localize("gui.damage", "Estimated Damage"), ImGuiTreeNodeFlags.None)) {
@@ -828,6 +903,8 @@ internal abstract class BaseWindow : IDisposable {
 							ImGui.PushID($"materia#link#{item.RowId}");
 							if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
 								Ui.Plugin.ChatGui.LinkItem(item, false);
+							if (ImGui.IsItemHovered())
+								ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
 							ImGui.PopID();
 						}
 					}
@@ -878,6 +955,8 @@ internal abstract class BaseWindow : IDisposable {
 					ImGui.PushID($"item#link#{rawItem.ID}");
 					if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
 						Ui.Plugin.ChatGui.LinkItem(item, rawItem.HighQuality);
+					if (ImGui.IsItemHovered())
+						ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
 					ImGui.PopID();
 
 					if (stats is not null && stats.Count > 0)
@@ -1003,7 +1082,8 @@ internal abstract class BaseWindow : IDisposable {
 		bool includeRemaining = false,
 		bool includeTiers = false,
 		bool includeFood = false,
-		bool includeBonus = false
+		bool includeBonus = false,
+		StatData? gcd = null
 	) {
 		int cols = 8;
 		if (includeBase)
@@ -1196,6 +1276,53 @@ internal abstract class BaseWindow : IDisposable {
 				if (ImGui.IsItemHovered())
 					ImGui.SetTooltip(Localization.Localize("attr.remaining", "The number of attribute points remaining until the item's limits are reached."));
 			}
+
+			// GCD Tiering
+			if (includeTiers && gcd != null && (param.RowId == (int) Stat.SKS || param.RowId == (int) Stat.SPS)) {
+				ImGui.TableNextRow();
+				ImGui.TableNextColumn();
+				ImGui.Text($"   ... (GCD)");
+
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("attr.gcd", "This line displays the number of attribute points needed to change your GCD, while the previous line's tiers are for DoT damage."));
+
+				if (includeBase) {
+					ImGui.TableNextColumn(); // Base
+					ImGui.TableNextColumn(); // +
+				}
+				ImGui.TableNextColumn(); // Gear
+				ImGui.TableNextColumn(); // +
+				ImGui.TableNextColumn(); // Delta
+				ImGui.TableNextColumn(); // -
+				ImGui.TableNextColumn(); // Waste
+				if (includeFood) {
+					ImGui.TableNextColumn(); // +
+					ImGui.TableNextColumn(); // Food
+				}
+				if (includeBonus) {
+					ImGui.TableNextColumn(); // +
+					ImGui.TableNextColumn(); // Party
+				}
+				ImGui.TableNextColumn(); // =
+				ImGui.TableNextColumn(); // Total
+				ImGui.TableNextColumn(); // (space)
+
+				ImGui.TableNextColumn(); // Prev
+				if (gcd.PreviousTier == 0)
+					ImGui.TextColored(ImGuiColors.ParsedGreen, gcd.PreviousTier.ToString());
+				else
+					ImGui.TextColored(ImGuiColors.DalamudGrey, gcd.PreviousTier.ToString());
+
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("attr.prev-tier", "The number of attribute points since the previous tier."));
+
+				ImGui.TableNextColumn(); // Next
+				ImGui.TextColored(ImGuiColors.DalamudGrey, gcd.NextTier.ToString());
+
+				if (ImGui.IsItemHovered())
+					ImGui.SetTooltip(Localization.Localize("attr.next-tier", "The number of attribute points to the next tier."));
+			}
+
 		}
 
 		ImGui.EndTable();

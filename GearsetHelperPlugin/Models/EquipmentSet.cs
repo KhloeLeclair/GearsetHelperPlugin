@@ -47,7 +47,7 @@ internal class EquipmentSet {
 	/// <summary>
 	/// The percentage stats should be modified due to group bonus.
 	/// </summary>
-	public float GroupBonus { get; set; } = 1f;
+	public float GroupBonus { get; set; } = 0f;
 
 	/// <summary>
 	/// Food to apply to the stats.
@@ -86,6 +86,8 @@ internal class EquipmentSet {
 	public Dictionary<uint, ExtendedBaseParam> Params { get; } = [];
 	public Dictionary<uint, StatData> Attributes { get; } = [];
 	public List<Dictionary<uint, StatData>> ItemAttributes { get; } = [];
+
+	public StatData? GCD { get; private set; } = null;
 
 	public StatData? WeaponDamage { get; private set; } = null;
 
@@ -870,7 +872,7 @@ internal class EquipmentSet {
 		));
 	}
 
-	private static double CalculateGCD(int coefficient, int extra, int levelModifier, int modifier = 0, int haste = 0) {
+	internal static double CalculateGCD(int coefficient, int extra, int levelModifier, int modifier = 0, int haste = 0) {
 		return Math.Floor(
 			Math.Floor(
 				Math.Floor(
@@ -895,6 +897,54 @@ internal class EquipmentSet {
 			100.0
 		) / 100.0;
 	}
+
+	internal static IEnumerable<int> CalculateGcdTiers(int coefficient, int levelModifier, int modifier = 0, int haste = 0, int start = 0, int limit = 99999) {
+		double previous = double.MinValue;
+
+		int i = start;
+		while (i <= limit) {
+			double value = CalculateGCD(coefficient, i, levelModifier, modifier, haste);
+			if (value != previous) {
+				previous = value;
+				yield return i;
+			}
+
+			i++;
+		}
+	}
+
+	private void UpdateGCDTiers(ParamGrow growth, bool wantSpell) {
+		uint statID = (uint) (wantSpell ? Stat.SPS : Stat.SKS);
+
+		Attributes.TryGetValue(statID, out StatData? stat);
+		Data.COEFFICIENTS.TryGetValue(statID, out int coefficient);
+
+		int total = stat is null ? 0 : stat.ExtraFood;
+
+		// We need to find two tiers:
+		// 1. The last tier before our value
+		// 2. The next tier after our value
+
+		int previousTier = int.MinValue;
+		int nextTier = int.MaxValue;
+
+		int range = 100;
+
+		foreach (int tier in CalculateGcdTiers(coefficient, growth.LevelModifier, 0, start: total - range, limit: total + range)) {
+			if (tier <= total && tier > previousTier)
+				previousTier = tier;
+			else if (tier > total) {
+				nextTier = tier;
+				break;
+			}
+		}
+
+		GCD = new((uint) Stat.GCD) {
+			PreviousTier = previousTier - total,
+			NextTier = nextTier - total
+		};
+	}
+
 
 	private void CalculateSpeedStuff(ParamGrow growth, bool wantSpell) {
 		uint statID = (uint) (wantSpell ? Stat.SPS : Stat.SKS);
@@ -1085,9 +1135,13 @@ internal class EquipmentSet {
 
 		// Finally, calculate tiers.
 		ParamGrow? growth = GrowRow();
-		if (growth is not null)
+		if (growth is not null) {
 			foreach (var entry in Attributes)
 				entry.Value.UpdateTiers(growth.LevelModifier, job?.Role == 1);
+
+			// Update the GCD
+			UpdateGCDTiers(growth, job != null && job.IsMagical());
+		}
 	}
 
 	/// <summary>
