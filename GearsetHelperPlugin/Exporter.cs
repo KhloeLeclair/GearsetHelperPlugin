@@ -113,6 +113,11 @@ internal class Exporter : IDisposable {
 				return result;
 			}
 
+			if (jobData.IsCrafter() || jobData.IsGatherer()) {
+				result.Error = Dalamud.Localization.Localize("export.xivgear.no-dohl", "XivGear does not support non-combat jobs.");
+				return result;
+			}
+
 			string job = jobData.Abbreviation.ToString().ToUpper();
 			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name) ?? "Job";
 
