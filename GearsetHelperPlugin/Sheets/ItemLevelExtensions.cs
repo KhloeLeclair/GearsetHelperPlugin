@@ -1,0 +1,88 @@
+using System;
+
+using Lumina.Excel.Sheets;
+
+namespace GearsetHelperPlugin.Sheets;
+
+internal static class ItemLevelExtensions {
+
+	internal static ushort BaseParam(this ItemLevel level, uint index, bool shouldThrow = true) {
+		return index switch {
+			1 => level.Strength,
+			2 => level.Dexterity,
+			3 => level.Vitality,
+			4 => level.Intelligence,
+			5 => level.Mind,
+			6 => level.Piety,
+			7 => level.HP,
+			8 => level.MP,
+			9 => level.TP,
+			10 => level.GP,
+			11 => level.CP,
+			12 => level.PhysicalDamage,
+			13 => level.MagicalDamage,
+			14 => level.Delay,
+			15 => level.AdditionalEffect,
+			16 => level.AttackSpeed,
+			17 => level.BlockRate,
+			18 => level.BlockStrength,
+			19 => level.Tenacity,
+			20 => level.AttackPower,
+			21 => level.Defense,
+			22 => level.DirectHitRate,
+			23 => level.Evasion,
+			24 => level.MagicDefense,
+			25 => level.CriticalHitPower,
+			26 => level.CriticalHitResilience,
+			27 => level.CriticalHit,
+			28 => level.CriticalHitEvasion,
+			29 => level.SlashingResistance,
+			30 => level.PiercingResistance,
+			31 => level.BluntResistance,
+			32 => level.ProjectileResistance,
+			33 => level.AttackMagicPotency,
+			34 => level.HealingMagicPotency,
+			35 => level.EnhancementMagicPotency,
+			36 => level.EnfeeblingMagicPotency, // ??? Not elemental bonus?
+			37 => level.FireResistance,
+			38 => level.IceResistance,
+			39 => level.WindResistance,
+			40 => level.EarthResistance,
+			41 => level.LightningResistance,
+			42 => level.WaterResistance,
+			43 => level.MagicResistance,
+			44 => level.Determination,
+			45 => level.SkillSpeed,
+			46 => level.SpellSpeed,
+			47 => level.Haste,
+			48 => level.Morale,
+			49 => level.Enmity,
+			50 => level.EnmityReduction,
+			51 => level.CarefulDesynthesis,
+			52 => level.EXPBonus,
+			53 => level.Regen,
+			54 => level.Refresh,
+			55 => level.MovementSpeed,
+			56 => level.Spikes,
+			57 => level.SlowResistance,
+			58 => level.PetrificationResistance,
+			59 => level.ParalysisResistance,
+			60 => level.SilenceResistance,
+			61 => level.BlindResistance,
+			62 => level.PoisonResistance,
+			63 => level.StunResistance,
+			64 => level.SleepResistance,
+			65 => level.BindResistance,
+			66 => level.HeavyResistance,
+			67 => level.DoomResistance,
+			68 => level.ReducedDurabilityLoss,
+			69 => level.IncreasedSpiritbondGain,
+			70 => level.Craftsmanship,
+			71 => level.Control,
+			72 => level.Gathering,
+			73 => level.Perception,
+			_ => shouldThrow ? throw new IndexOutOfRangeException(nameof(index)) : (ushort) 0
+		};
+	}
+
+}

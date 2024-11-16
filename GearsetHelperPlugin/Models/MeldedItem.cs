@@ -1,4 +1,4 @@
-using GearsetHelperPlugin.Sheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin.Models;
 
@@ -8,10 +8,10 @@ internal record struct MeldedItem(
 	MeldedMateria[] Melds
 ) {
 
-	public ExtendedItem? Row() {
-		if (!Data.CheckSheets())
+	public Item? Row() {
+		if (!Data.CheckSheets() || !Data.ItemSheet.TryGetRow(ID, out var row))
 			return null;
-		return Data.ItemSheet.GetRow(ID);
+		return row;
 	}
 
 };

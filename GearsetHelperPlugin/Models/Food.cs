@@ -1,9 +1,7 @@
-using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 
-using Lumina.Excel.GeneratedSheets;
-using GearsetHelperPlugin.Sheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin.Models;
 
@@ -28,19 +26,16 @@ internal record Food(
 	}
 
 	public void UpdateStats(ItemFood? data = null) {
-		data ??= FoodRow();
 		Stats.Clear();
 
-		if (data is null || data.UnkData1.Length == 0 || ! Data.CheckSheets())
+		if (!data.HasValue || data.Value.Params.Count == 0 || !Data.CheckSheets())
 			return;
 
-		foreach (var entry in data.UnkData1) {
-			if (entry.BaseParam == 0)
+		foreach (var entry in data.Value.Params) {
+			if (!entry.BaseParam.IsValid || entry.BaseParam.RowId == 0)
 				continue;
 
-			var param = Data.ParamSheet.GetRow(entry.BaseParam);
-			if (param is null)
-				continue;
+			var param = entry.BaseParam.Value;
 
 			sbyte val = HQ ? entry.ValueHQ : entry.Value;
 			short max = HQ ? entry.MaxHQ : entry.Max;
@@ -50,13 +45,13 @@ internal record Food(
 
 			string name;
 			if (
-				Data.TryGetStat(entry.BaseParam, out Stat? st) &&
+				Data.TryGetStat(param.RowId, out Stat? st) &&
 				Data.ABBREVIATIONS.TryGetValue(st.Value, out string? abbrev) &&
 				!string.IsNullOrEmpty(abbrev)
 			)
 				name = abbrev;
 			else
-				name = param.Name;
+				name = param.Name.ToString();
 
 			string line;
 			if (entry.IsRelative)
@@ -64,8 +59,8 @@ internal record Food(
 			else
 				line = $"{name} +{value}";
 
-			Stats[entry.BaseParam] = new FoodStat(
-				StatID: entry.BaseParam,
+			Stats[param.RowId] = new FoodStat(
+				StatID: param.RowId,
 				Line: line,
 				Relative: entry.IsRelative,
 				Multiplier: multiplier,
@@ -74,16 +69,16 @@ internal record Food(
 		}
 	}
 
-	public ExtendedItem? ItemRow() {
-		if (!Data.CheckSheets())
+	public Item? ItemRow() {
+		if (!Data.CheckSheets() || !Data.ItemSheet.TryGetRow(ItemID, out var row))
 			return null;
-		return Data.ItemSheet.GetRow(ItemID);
+		return row;
 	}
 
 	public ItemFood? FoodRow() {
-		if (!Data.CheckSheets())
+		if (!Data.CheckSheets() || !Data.FoodSheet.TryGetRow(FoodID, out var row))
 			return null;
-		return Data.FoodSheet.GetRow(FoodID);
+		return row;
 	}
 
 }

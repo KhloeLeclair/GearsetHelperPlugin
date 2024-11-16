@@ -17,11 +17,10 @@ using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 using GearsetHelperPlugin.Models;
-using GearsetHelperPlugin.Sheets;
 
 using ImGuiNET;
 
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 
 using DStatus = Dalamud.Game.ClientState.Statuses.Status;
 
@@ -117,7 +116,7 @@ internal abstract class BaseWindow : IDisposable {
 
 		foreach (var member in Ui.Plugin.PartyList) {
 			//Ui.Plugin.Logger.Debug($"Party Member: {member.Name} {member}");
-			if (member.ClassJob.GameData is null)
+			if (!member.ClassJob.IsValid)
 				continue;
 
 			if (member.GameObject != null && player.EntityId == member.GameObject.EntityId)
@@ -125,7 +124,7 @@ internal abstract class BaseWindow : IDisposable {
 
 			members++;
 
-			var job = member.ClassJob.GameData;
+			var job = member.ClassJob.Value;
 			if (job.IsTank())
 				roles.Add("tank");
 			else if (job.IsHealer())
@@ -163,8 +162,8 @@ internal abstract class BaseWindow : IDisposable {
 	#region Icons
 
 	protected ISharedImmediateTexture? GetIcon(Item? item, bool hq = false) {
-		if (item is not null)
-			return GetIcon(item.Icon, hq);
+		if (item.HasValue)
+			return GetIcon(item.Value.Icon, hq);
 		return null;
 	}
 
@@ -389,11 +388,11 @@ internal abstract class BaseWindow : IDisposable {
 			return null;
 
 		return new(filter, choices.Where(food => {
-			ExtendedItem? item = food.ItemRow();
+			Item? item = food.ItemRow();
 			if (item is null)
 				return false;
 
-			return item.Name.ToString().IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) != -1;
+			return item.Value.Name.ToString().IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) != -1;
 
 		}).ToList());
 	}
@@ -402,12 +401,14 @@ internal abstract class BaseWindow : IDisposable {
 		bool result = false;
 		choice = null;
 
-		ExtendedItem? selitem = selected?.ItemRow();
+		Item? selitem = selected?.ItemRow();
 
 		string curLabel;
 		string noneLabel = Localization.Localize("gui.food.none", "(None)");
-		if (selitem is not null)
-			curLabel = selected!.HQ ? $"{selitem.Name} {(char) SeIconChar.HighQuality}" : selitem.Name;
+		if (selitem.HasValue)
+			curLabel = selected!.HQ
+				? $"{selitem.Value.Name.ExtractText()} {(char) SeIconChar.HighQuality}"
+				: selitem.Value.Name.ExtractText().ToString();
 		else
 			curLabel = noneLabel;
 
@@ -478,8 +479,7 @@ internal abstract class BaseWindow : IDisposable {
 
 			for (int i = start - 1; i < end; i++) {
 				Food food = visible[i];
-				ExtendedItem? item = food.ItemRow();
-				if (item is null)
+				if (food.ItemRow() is not Item item)
 					continue;
 
 				bool current = selected == food;
@@ -517,13 +517,13 @@ internal abstract class BaseWindow : IDisposable {
 
 				ImGui.SetCursorPosX(oldPos.X + width + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y);
-				ImGui.Text(item.Name);
+				ImGui.Text(item.Name.ExtractText().ToString());
 				if (food.HQ) {
 					ImGui.SameLine();
 					ImGui.Text($"{(char) SeIconChar.HighQuality}");
 				}
 				ImGui.SameLine();
-				ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.Row}");
+				ImGui.TextColored(ImGuiColors.DalamudGrey, $"i{item.LevelItem.RowId}");
 
 				ImGui.SetCursorPosX(oldPos.X + (image?.Width ?? 0) + 2 * padX);
 				ImGui.SetCursorPosY(oldPos.Y + size.Y / 2);
@@ -763,13 +763,15 @@ internal abstract class BaseWindow : IDisposable {
 					}
 
 					if (SelectedFood is not null) {
-						ImGui.SameLine();
-						ImGui.PushID("food#link");
-						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
-							Ui.Plugin.ChatGui.LinkItem(SelectedFood.ItemRow(), SelectedFood.HQ);
-						if (ImGui.IsItemHovered())
-							ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
-						ImGui.PopID();
+						if (SelectedFood.ItemRow() is Item food) {
+							ImGui.SameLine();
+							ImGui.PushID("food#link");
+							if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
+								Ui.Plugin.ChatGui.LinkItem(food, SelectedFood.HQ);
+							if (ImGui.IsItemHovered())
+								ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
+							ImGui.PopID();
+						}
 
 						ImGui.SameLine();
 						ImGui.PushID("food#clear");
@@ -798,13 +800,15 @@ internal abstract class BaseWindow : IDisposable {
 					}
 
 					if (SelectedMedicine is not null) {
-						ImGui.SameLine();
-						ImGui.PushID("medicine#link");
-						if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
-							Ui.Plugin.ChatGui.LinkItem(SelectedMedicine.ItemRow(), SelectedMedicine.HQ);
-						if (ImGui.IsItemHovered())
-							ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
-						ImGui.PopID();
+						if (SelectedMedicine.ItemRow() is Item medicine) {
+							ImGui.SameLine();
+							ImGui.PushID("medicine#link");
+							if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
+								Ui.Plugin.ChatGui.LinkItem(medicine, SelectedMedicine.HQ);
+							if (ImGui.IsItemHovered())
+								ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
+							ImGui.PopID();
+						}
 
 						ImGui.SameLine();
 						ImGui.PushID("medicine#clear");
@@ -845,11 +849,11 @@ internal abstract class BaseWindow : IDisposable {
 						.Where(raw => raw.Key != 0)
 						.Select(entry => {
 							return (
-								Data.ItemSheet.GetRow(entry.Key),
+								Data.ItemSheet.GetRowOrDefault(entry.Key),
 								entry.Value
 							);
 						})
-						.Where(row => row.Item1 != null);
+						.Where(row => row.Item1.HasValue);
 
 					if (CachedSet.EmptyMeldSlots > 0) {
 						var list = entries.ToList();
@@ -864,7 +868,9 @@ internal abstract class BaseWindow : IDisposable {
 								entries = entries.OrderBy(val => val.Value);
 								break;
 							case 1:
-								entries = entries.OrderBy(val => val.Item1?.Name.RawString);
+								entries = entries.OrderBy(val => val.Item1.HasValue
+									? val.Item1.Value.Name.ToString()
+									: null);
 								break;
 						}
 
@@ -873,7 +879,7 @@ internal abstract class BaseWindow : IDisposable {
 					}
 
 					foreach (var entry in entries) {
-						ExtendedItem? item = entry.Item1;
+						Item? item = entry.Item1;
 						ImGui.TableNextRow();
 
 						var icon = GetIcon(item)?.GetWrapOrEmpty();
@@ -894,15 +900,15 @@ internal abstract class BaseWindow : IDisposable {
 							ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						}
 
-						if (item == null)
+						if (!item.HasValue)
 							ImGui.TextColored(ImGuiColors.ParsedGrey, Localization.Localize("gui.empty-slots", "(Empty Slots)"));
 						else {
-							ImGui.Text(item.Name);
+							ImGui.Text(item.Value.Name.ExtractText().ToString());
 
 							ImGui.SameLine(ImGui.GetColumnWidth() - 30);
-							ImGui.PushID($"materia#link#{item.RowId}");
+							ImGui.PushID($"materia#link#{item.Value.RowId}");
 							if (ImGuiComponents.IconButton(FontAwesomeIcon.Link))
-								Ui.Plugin.ChatGui.LinkItem(item, false);
+								Ui.Plugin.ChatGui.LinkItem(item.Value, false);
 							if (ImGui.IsItemHovered())
 								ImGui.SetTooltip(Localization.Localize("gui.link-item", "Link Item in Chat"));
 							ImGui.PopID();
@@ -918,8 +924,7 @@ internal abstract class BaseWindow : IDisposable {
 				for (int i = 0; i < CachedSet.Items.Count; i++) {
 					MeldedItem rawItem = CachedSet.Items[i];
 					Dictionary<uint, StatData> stats = CachedSet.ItemAttributes[i];
-					ExtendedItem? item = rawItem.Row();
-					if (item is null)
+					if (rawItem.Row() is not Item item)
 						continue;
 
 					if (first)
@@ -938,16 +943,16 @@ internal abstract class BaseWindow : IDisposable {
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 					}
 
-					ImGui.Text(rawItem.HighQuality ? $"{item.Name} {(char) SeIconChar.HighQuality}" : item.Name);
+					ImGui.Text(rawItem.HighQuality ? $"{item.Name.ExtractText()} {(char) SeIconChar.HighQuality}" : item.Name.ExtractText().ToString());
 
-					if (CachedSet.ILvlSync > 0 && item.LevelItem.Row > CachedSet.ILvlSync) {
+					if (CachedSet.ILvlSync > 0 && item.LevelItem.RowId > CachedSet.ILvlSync) {
 						ImGui.SameLine();
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
 						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(At i{CachedSet.ILvlSync})");
-					} else if (item.ExtendedItemLevel.Value is ExtendedItemLevel level) {
+					} else if (item.LevelItem.IsValid) {
 						ImGui.SameLine();
 						ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (height - ImGui.GetFontSize()) / 2);
-						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(i{level.RowId})");
+						ImGui.TextColored(ImGuiColors.ParsedGrey, $"(i{item.LevelItem.RowId})");
 					}
 
 					ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 32);
@@ -975,8 +980,6 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	internal static void DrawCalculatedTable(IEnumerable<CalculatedStat> calculated) {
-		DrawOutdatedMathWarning();
-
 		ImGui.BeginTable("CalcTable", 2, ImGuiTableFlags.RowBg);
 
 		/*ImGui.TableSetupColumn(Localization.Localize("gui.name", "Name"), ImGuiTableColumnFlags.WidthStretch, 1f);
@@ -1077,7 +1080,7 @@ internal abstract class BaseWindow : IDisposable {
 
 	internal static void DrawStatTable(
 		IEnumerable<StatData> stats,
-		Dictionary<uint, ExtendedBaseParam> paramDictionary,
+		Dictionary<uint, BaseParam> paramDictionary,
 		bool includeBase = false,
 		bool includeRemaining = false,
 		bool includeTiers = false,
@@ -1139,7 +1142,7 @@ internal abstract class BaseWindow : IDisposable {
 
 		var data = stats
 			.Where(stat => paramDictionary.ContainsKey(stat.ID))
-			.Select<StatData, (StatData, ExtendedBaseParam)>(stat => (stat, paramDictionary[stat.ID]))
+			.Select<StatData, (StatData, BaseParam)>(stat => (stat, paramDictionary[stat.ID]))
 			.OrderBy(entry => entry.Item2.OrderPriority);
 
 		foreach (var entry in data) {
@@ -1149,11 +1152,11 @@ internal abstract class BaseWindow : IDisposable {
 			ImGui.TableNextRow();
 
 			ImGui.TableNextColumn();
-			ImGui.Text(param.Name);
+			ImGui.Text(param.Name.ExtractText().ToString());
 
 			if (ImGui.IsItemHovered()) {
 				//if (string.IsNullOrEmpty(param.Description))
-				ImGui.SetTooltip(param.Name);
+				ImGui.SetTooltip(param.Name.ExtractText().ToString());
 				/*else
 					ImGui.SetTooltip($"{param.Name}\n\n{param.Description}");*/
 			}

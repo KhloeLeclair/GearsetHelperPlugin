@@ -9,9 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 
 using GearsetHelperPlugin.Models;
-using GearsetHelperPlugin.Sheets;
 
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -107,8 +106,7 @@ internal class Exporter : IDisposable {
 		try {
 			Plugin.Logger.Info("Exporting gearset to XivGear.");
 
-			var jobData = gearset.JobRow();
-			if (jobData == null) {
+			if (gearset.JobRow() is not ClassJob jobData) {
 				result.Error = "Unable to detect class.";
 				return result;
 			}
@@ -119,7 +117,7 @@ internal class Exporter : IDisposable {
 			}
 
 			string job = jobData.Abbreviation.ToString().ToUpper();
-			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name) ?? "Job";
+			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name.ExtractText().ToString()) ?? "Job";
 
 			string name = $"i{gearset.ItemLevel} {jobName}";
 			if (!string.IsNullOrEmpty(gearset.PlayerName))
@@ -141,11 +139,10 @@ internal class Exporter : IDisposable {
 			bool had_right = false;
 
 			foreach (var rawItem in gearset.Items) {
-				ExtendedItem? item = rawItem.Row();
-				if (item == null)
+				if (rawItem.Row() is not Item item)
 					continue;
 
-				uint slot = item.EquipSlotCategory.Row;
+				uint slot = item.EquipSlotCategory.RowId;
 				string? mappedSlot;
 				if (slot == 12) {
 					mappedSlot = had_right ? "RingLeft" : "RingRight";
@@ -171,14 +168,13 @@ internal class Exporter : IDisposable {
 					if (raw.ID == 0)
 						continue;
 
-					var materia = raw.Row();
-					if (materia == null || raw.Grade >= materia.Item.Length)
+					if (raw.Row() is not Materia materia || raw.Grade >= materia.Item.Count)
 						continue;
 
-					var mitem = materia.Item[raw.Grade]?.Value;
-					if (mitem == null)
+					if (!materia.Item[raw.Grade].IsValid)
 						continue;
 
+					var mitem = materia.Item[raw.Grade].Value;
 					melds.Add(new JObject() {
 						{ "id", mitem.RowId }
 					});
@@ -234,12 +230,10 @@ internal class Exporter : IDisposable {
 
 		try {
 
-			Dictionary<uint, int> items = new();
+			Dictionary<uint, int> items = [];
 
 			foreach (var item in gearset.Items) {
-				Item? data = item.Row();
-				var cat = data?.EquipSlotCategory.Value;
-				if (cat is null || cat.SoulCrystal == 1)
+				if (item.Row() is not Item data || !data.EquipSlotCategory.IsValid || data.EquipSlotCategory.Value.SoulCrystal == 1)
 					continue;
 
 				items[item.ID] = items.GetValueOrDefault(item.ID) + 1;
@@ -386,8 +380,7 @@ internal class Exporter : IDisposable {
 
 			Plugin.Logger.Info("Exporting gearset to Etro.");
 
-			ClassJob? jobData = gearset.JobRow();
-			if (jobData == null) {
+			if (gearset.JobRow() is not ClassJob jobData) {
 				result.Error = "Unable to detect class.";
 				return result;
 			}
@@ -395,7 +388,7 @@ internal class Exporter : IDisposable {
 			uint minIlvl = 999;
 			uint maxIlvl = 1;
 
-			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name) ?? "Job";
+			string jobName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(jobData.Name.ExtractText().ToString()) ?? "Job";
 			int job = (int) jobData.RowId;
 
 			string name = $"i{gearset.ItemLevel} {jobName}";
@@ -415,11 +408,10 @@ internal class Exporter : IDisposable {
 			bool had_right = false;
 
 			foreach (var item in gearset.Items) {
-				var data = item.Row();
-				if (data == null)
+				if (item.Row() is not Item data || !data.EquipSlotCategory.IsValid)
 					continue;
 
-				uint slot = data.EquipSlotCategory.Row;
+				uint slot = data.EquipSlotCategory.RowId;
 				string? mappedSlot;
 				string materiaSlot = item.ID.ToString();
 
@@ -441,7 +433,7 @@ internal class Exporter : IDisposable {
 					continue;
 				}
 
-				uint ilvl = data.LevelItem.Row;
+				uint ilvl = data.LevelItem.RowId;
 				int level = data.LevelEquip;
 
 				if (ilvl < minIlvl)
@@ -458,14 +450,13 @@ internal class Exporter : IDisposable {
 					if (raw.ID == 0)
 						continue;
 
-					var materia = raw.Row();
-					if (materia == null || raw.Grade >= materia.Item.Length)
+					if (raw.Row() is not Materia materia || raw.Grade >= materia.Item.Count)
 						continue;
 
-					var mitem = materia.Item[raw.Grade]?.Value;
-					if (mitem == null)
+					if (!materia.Item[raw.Grade].IsValid)
 						continue;
 
+					var mitem = materia.Item[raw.Grade].Value;
 					melds.Add(i.ToString(), mitem.RowId);
 					i++;
 				}
@@ -651,8 +642,7 @@ internal class Exporter : IDisposable {
 		try {
 			Plugin.Logger.Info("Exporting gearset to Ariyala.");
 
-			var jobData = gearset.JobRow();
-			if (jobData == null) {
+			if (gearset.JobRow() is not ClassJob jobData) {
 				result.Error = "Unable to detect class.";
 				return result;
 			}
@@ -681,11 +671,10 @@ internal class Exporter : IDisposable {
 			bool had_right = false;
 
 			foreach (var rawItem in gearset.Items) {
-				ExtendedItem? item = rawItem.Row();
-				if (item == null)
+				if (rawItem.Row() is not Item item || !item.EquipSlotCategory.IsValid)
 					continue;
 
-				uint slot = item.EquipSlotCategory.Row;
+				uint slot = item.EquipSlotCategory.RowId;
 				string? mappedSlot;
 				if (slot == 12) {
 					mappedSlot = had_right ? "ringLeft" : "ringRight";
@@ -699,7 +688,7 @@ internal class Exporter : IDisposable {
 				if (mappedSlot == null)
 					continue;
 
-				uint ilvl = item.LevelItem.Row;
+				uint ilvl = item.LevelItem.RowId;
 				int level = item.LevelEquip;
 
 				if (ilvl < minIlvl)
@@ -720,13 +709,15 @@ internal class Exporter : IDisposable {
 					if (rawMateria.ID == 0)
 						continue;
 
-					var materia = rawMateria.Row();
-					if (materia == null || rawMateria.Grade >= materia.Value.Length)
+					if (rawMateria.Row() is not Materia materia || rawMateria.Grade >= materia.Item.Count)
 						continue;
 
-					uint stat = materia.BaseParam.Row;
+					if (!materia.Item[rawMateria.Grade].IsValid)
+						continue;
+
+					uint stat = materia.BaseParam.RowId;
 					if (!ARIYALA_STAT_MAP.TryGetValue(stat, out string? mappedStat)) {
-						Plugin.Logger.Warning($"Unknown Stat for Materia: {materia.Item[rawMateria.Grade]?.Value?.Name} -- Stat: {stat}");
+						Plugin.Logger.Warning($"Unknown Stat for Materia: {materia.Item[rawMateria.Grade].Value.Name} -- Stat: {stat}");
 						continue;
 					}
 

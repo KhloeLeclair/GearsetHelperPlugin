@@ -4,7 +4,7 @@ using System.Globalization;
 
 using GearsetHelperPlugin.Sheets;
 
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin.Models;
 
@@ -83,7 +83,7 @@ internal class EquipmentSet {
 
 	#region Attributes
 
-	public Dictionary<uint, ExtendedBaseParam> Params { get; } = [];
+	public Dictionary<uint, BaseParam> Params { get; } = [];
 	public Dictionary<uint, StatData> Attributes { get; } = [];
 	public List<Dictionary<uint, StatData>> ItemAttributes { get; } = [];
 
@@ -124,34 +124,33 @@ internal class EquipmentSet {
 	#region Sheet Helpers
 
 	public ParamGrow? GrowRow() {
-		if (!Data.CheckSheets() || Level == 0)
+		if (!Data.CheckSheets() || !Data.GrowSheet.TryGetRow(EffectiveLevel, out var row))
 			return null;
-
-		return Data.GrowSheet.GetRow(EffectiveLevel);
+		return row;
 	}
 
 	public Race? RaceRow() {
-		if (!Data.CheckSheets() || Race == 0)
+		if (!Data.CheckSheets() || !Data.RaceSheet.TryGetRow(Race, out var row))
 			return null;
-		return Data.RaceSheet.GetRow(Race);
+		return row;
 	}
 
 	public Tribe? TribeRow() {
-		if (!Data.CheckSheets() || Tribe == 0)
+		if (!Data.CheckSheets() || !Data.TribeSheet.TryGetRow(Tribe, out var row))
 			return null;
-		return Data.TribeSheet.GetRow(Tribe);
+		return row;
 	}
 
 	public ClassJob? JobRow() {
-		if (!Data.CheckSheets() || Class == 0)
+		if (!Data.CheckSheets() || !Data.ClassSheet.TryGetRow(Class, out var row))
 			return null;
-		return Data.ClassSheet.GetRow(Class);
+		return row;
 	}
 
 	public ClassJob? EffectiveJobRow() {
-		if (!Data.CheckSheets() || EffectiveClass == 0)
+		if (!Data.CheckSheets() || !Data.ClassSheet.TryGetRow(EffectiveClass, out var row))
 			return null;
-		return Data.ClassSheet.GetRow(EffectiveClass);
+		return row;
 	}
 
 	#endregion
@@ -178,8 +177,8 @@ internal class EquipmentSet {
 		// Ensure that the Level is accurate
 		foreach (var item in Items) {
 			var data = item.Row();
-			if (data is not null && data.LevelEquip > level)
-				level = data.LevelEquip;
+			if (data.HasValue && data.Value.LevelEquip > level)
+				level = data.Value.LevelEquip;
 		}
 
 		bool changed = Tribe != tribe || Level != level;
@@ -207,11 +206,8 @@ internal class EquipmentSet {
 			byte elevel = levelSync < Level ? levelSync : Level;
 			if (elevel >= 100)
 				ilvlSync = 795;
-			else {
-				ParamGrow? growth = Data.GrowSheet.GetRow(levelSync);
-				if (growth is not null)
-					ilvlSync = growth.ItemLevelSync;
-			}
+			else if (Data.GrowSheet.TryGetRow(levelSync, out var growth))
+				ilvlSync = growth.ItemLevelSync;
 		}
 
 		bool changed = levelSync != LevelSync && ilvlSync != ILvlSync;
@@ -244,18 +240,18 @@ internal class EquipmentSet {
 		Class = 0;
 		EffectiveClass = 0;
 
-		ExtendedClassJobCategory? category = null;
+		ClassJobCategory? category = null;
 
 		for (int i = 0; i < Items.Count; i++) {
 			MeldedItem item = Items[i];
-			ExtendedItem? data = item.Row();
-			if (data is null)
+			Item? data = item.Row();
+			if (!data.HasValue)
 				continue;
 
-			EquipSlotCategory? slot = data.EquipSlotCategory.Value;
-			if (slot != null) {
+			if (data.Value.EquipSlotCategory.IsValid) {
+				var slot = data.Value.EquipSlotCategory.Value;
 				if (slot.MainHand == 1)
-					category = data.ExtendedClassJobCategory.Value;
+					category = data.Value.ClassJobCategory.Value;
 				if (slot.OffHand == 1) {
 					//PluginLog.Log($"Off-hand: {data.Name}");
 					HasOffhand = true;
@@ -278,7 +274,7 @@ internal class EquipmentSet {
 				if (row.JobIndex == 0)
 					continue;
 
-				if (category.Classes[row.RowId]) {
+				if (category.Value.Classes(row.RowId)) {
 					job = row;
 					break;
 				}
@@ -286,9 +282,9 @@ internal class EquipmentSet {
 
 			// Widen the search to ANY class if we didn't find a job, which
 			// should only happen in the case of crafters and gatherers.
-			if (job == null) {
+			if (!job.HasValue) {
 				foreach (var row in Data.ClassSheet) {
-					if (category.Classes[row.RowId]) {
+					if (category.Value.Classes(row.RowId)) {
 						job = row;
 						break;
 					}
@@ -296,16 +292,16 @@ internal class EquipmentSet {
 			}
 
 			// Now, if we found a job, save it.
-			if (job != null) {
-				Class = job.RowId;
-				EffectiveClass = job.RowId;
+			if (job.HasValue) {
+				Class = job.Value.RowId;
+				EffectiveClass = job.Value.RowId;
 
 				// If we don't have a soul crystal, and this job has
 				// a parent job, then switch it up for stat calculation
 				// but leave the class set on gearset for exporting
 				// correctly.
-				if (!HasCrystal && job.ClassJobParent.Row != 0)
-					EffectiveClass = job.ClassJobParent.Row;
+				if (!HasCrystal && job.Value.ClassJobParent.IsValid)
+					EffectiveClass = job.Value.ClassJobParent.RowId;
 			}
 		}
 
@@ -321,8 +317,8 @@ internal class EquipmentSet {
 
 		bool dohl = false;
 		ClassJob? job = JobRow();
-		if (job is not null)
-			dohl = job.Role == 0;
+		if (job.HasValue)
+			dohl = job.Value.Role == 0;
 
 		foreach (var food in Data.Food) {
 			uint ilvl = food.ILvl;
@@ -382,8 +378,8 @@ internal class EquipmentSet {
 
 		bool dohl = false;
 		ClassJob? job = JobRow();
-		if (job is not null)
-			dohl = job.Role == 0;
+		if (job.HasValue)
+			dohl = job.Value.Role == 0;
 
 		foreach (var food in Data.Medicine) {
 			uint ilvl = food.ILvl;
@@ -520,9 +516,9 @@ internal class EquipmentSet {
 			));
 		}
 
-		if (job is not null) {
+		if (job.HasValue) {
 			string spec;
-			if (job.DohDolJobIndex > 0 && HasCrystal)
+			if (job.Value.DohDolJobIndex > 0 && HasCrystal)
 				spec = $" ({Dalamud.Localization.Localize("calc.specialist", "Specialist")})";
 			else
 				spec = string.Empty;
@@ -530,7 +526,7 @@ internal class EquipmentSet {
 			Calculated.Add(new CalculatedStat(
 				"calc.class",
 				"Class",
-				CultureInfo.CurrentCulture.TextInfo.ToTitleCase(job.Name) + spec
+				CultureInfo.CurrentCulture.TextInfo.ToTitleCase(job.Value.Name.ExtractText().ToString()) + spec
 			));
 		}
 
@@ -552,42 +548,40 @@ internal class EquipmentSet {
 		if (growth is null)
 			return;
 
-		if (job is null || job.ClassJobCategory.Value is not ClassJobCategory cat)
+		if (!job.HasValue || !job.Value.ClassJobCategory.IsValid)
 			return;
 
-		if (job.DohDolJobIndex >= 0) {
+		if (job.Value.DohDolJobIndex >= 0) {
 			// DoH / DoL Calculated Stuff
 			// ... is nothing~
 			return;
 		}
 
 		// Combat Stuff
-		CalculateHPStuff(job, growth);
-		CalculateWeaponDamage(job, growth);
-		CalculateCritStuff(growth);
-		CalculateDHStuff(growth);
-		CalculateDetStuff(growth);
-		CalculateDefenseStuff(growth);
-		CalculateMagDefenseStuff(growth);
-
-		bool magicJob = cat.RowId == 31;
+		CalculateHPStuff(job.Value, growth.Value);
+		CalculateWeaponDamage(job.Value, growth.Value);
+		CalculateCritStuff(growth.Value);
+		CalculateDHStuff(growth.Value);
+		CalculateDetStuff(growth.Value);
+		CalculateDefenseStuff(growth.Value);
+		CalculateMagDefenseStuff(growth.Value);
 
 		// Tanks
-		if (job.Role == 1) {
-			CalculateTenacityStuff(growth);
+		if (job.Value.Role == 1) {
+			CalculateTenacityStuff(growth.Value);
 		}
 
 		// Healers
-		if (job.Role == 4) {
-			CalculatePietyStuff(growth);
+		if (job.Value.Role == 4) {
+			CalculatePietyStuff(growth.Value);
 		}
 
-		CalculateSpeedStuff(growth, wantSpell: magicJob);
+		CalculateSpeedStuff(growth.Value, wantSpell: job.Value.ClassJobCategory.RowId == 31);
 	}
 
 	private void CalculateWeaponDamage(ClassJob job, ParamGrow growth) {
 
-		if (WeaponDamage is null || job is null)
+		if (WeaponDamage is null)
 			return;
 
 		// First, we need to calculate the weapon damage multiplier.
@@ -775,10 +769,13 @@ internal class EquipmentSet {
 
 		int total = stat is null ? 0 : stat.ExtraFood;
 
+		// The coefficient for Tenacity defense is different than the coefficient for damage.
+		// Hence, using 200 here.
+
 		Calculated.Add(new CalculatedStat(
 			"calc.ten-mitigation",
 			"Tenacity Mitigation",
-			(Math.Floor(coefficient * (float) total / growth.LevelModifier) / 1000f).ToString("P1")
+			(Math.Floor(200 /*coefficient*/ * (float) total / growth.LevelModifier) / 1000f).ToString("P1")
 		));
 
 		Calculated.Add(new CalculatedStat(
@@ -1081,24 +1078,24 @@ internal class EquipmentSet {
 
 		// If we have a tribe, modify the base stats by the tribe's offsets.
 		Tribe? tribe = TribeRow();
-		if (tribe is not null) {
-			ModifyBaseStat(Stat.STR, extra: tribe.STR);
-			ModifyBaseStat(Stat.DEX, extra: tribe.DEX);
-			ModifyBaseStat(Stat.VIT, extra: tribe.VIT);
-			ModifyBaseStat(Stat.INT, extra: tribe.INT);
-			ModifyBaseStat(Stat.MND, extra: tribe.MND);
-			ModifyBaseStat(Stat.PIE, extra: tribe.PIE);
+		if (tribe.HasValue) {
+			ModifyBaseStat(Stat.STR, extra: tribe.Value.STR);
+			ModifyBaseStat(Stat.DEX, extra: tribe.Value.DEX);
+			ModifyBaseStat(Stat.VIT, extra: tribe.Value.VIT);
+			ModifyBaseStat(Stat.INT, extra: tribe.Value.INT);
+			ModifyBaseStat(Stat.MND, extra: tribe.Value.MND);
+			ModifyBaseStat(Stat.PIE, extra: tribe.Value.PIE);
 		}
 
 		// If we have a job, modify the base stats by the job's multipliers.
 		ClassJob? job = EffectiveJobRow();
-		if (job is not null) {
-			ModifyBaseStat(Stat.STR, job.ModifierStrength / 100f);
-			ModifyBaseStat(Stat.DEX, job.ModifierDexterity / 100f);
-			ModifyBaseStat(Stat.VIT, job.ModifierVitality / 100f);
-			ModifyBaseStat(Stat.INT, job.ModifierIntelligence / 100f);
-			ModifyBaseStat(Stat.MND, job.ModifierMind / 100f);
-			ModifyBaseStat(Stat.PIE, job.ModifierPiety / 100f);
+		if (job.HasValue) {
+			ModifyBaseStat(Stat.STR, job.Value.ModifierStrength / 100f);
+			ModifyBaseStat(Stat.DEX, job.Value.ModifierDexterity / 100f);
+			ModifyBaseStat(Stat.VIT, job.Value.ModifierVitality / 100f);
+			ModifyBaseStat(Stat.INT, job.Value.ModifierIntelligence / 100f);
+			ModifyBaseStat(Stat.MND, job.Value.ModifierMind / 100f);
+			ModifyBaseStat(Stat.PIE, job.Value.ModifierPiety / 100f);
 		}
 
 		// Apply food.
@@ -1135,12 +1132,12 @@ internal class EquipmentSet {
 
 		// Finally, calculate tiers.
 		ParamGrow? growth = GrowRow();
-		if (growth is not null) {
+		if (growth.HasValue) {
 			foreach (var entry in Attributes)
-				entry.Value.UpdateTiers(growth.LevelModifier, job?.Role == 1);
+				entry.Value.UpdateTiers(growth.Value.LevelModifier, job?.Role == 1);
 
 			// Update the GCD
-			UpdateGCDTiers(growth, job != null && job.IsMagical());
+			UpdateGCDTiers(growth.Value, job.HasValue && job.Value.IsMagical());
 		}
 	}
 
@@ -1184,29 +1181,29 @@ internal class EquipmentSet {
 			Dictionary<uint, StatData> stats = ItemAttributes[i];
 			stats.Clear();
 
-			ExtendedItem? item = rawItem.Row();
-			if (item is null)
+			if (rawItem.Row() is not Item item)
 				continue;
 
-			bool synced = ILvlSync > 0 && ILvlSync < item.LevelItem.Row && ILvlSync < Data.LevelSheet.RowCount;
-			ExtendedItemLevel? level = synced ?
-				Data.LevelSheet.GetRow(ILvlSync) :
-				item.ExtendedItemLevel.Value;
-
-			if (level is null)
+			bool synced = ILvlSync > 0 && ILvlSync < item.LevelItem.RowId && ILvlSync < Data.LevelSheet.Count;
+			ItemLevel level;
+			if (synced) {
+				if (!Data.LevelSheet.TryGetRow(ILvlSync, out level))
+					continue;
+			} else if (item.LevelItem.IsValid)
+				level = item.LevelItem.Value;
+			else
 				continue;
 
 			// Item Level Calculation
-			EquipSlotCategory? slot = item.EquipSlotCategory.Value;
-			if (slot is not null && slot.SoulCrystal == 0) {
+			EquipSlotCategory? slot = item.EquipSlotCategory.ValueNullable;
+			if (slot is not null && slot.Value.SoulCrystal == 0) {
 				uint amount = level.RowId;
 
 				// Special handling for equipment that has ilvl sync. If the
 				// item's ilvl at our current level is lower than its maximum
 				// ilvl, then use that. Never increase the ilvl from this.
 				if (item.SubStatCategory == 2) {
-					ParamGrow? growth = Data.GrowSheet.GetRow(EffectiveLevel);
-					if (growth is not null && growth.ItemLevelSync < amount)
+					if (Data.GrowSheet.TryGetRow(EffectiveLevel, out var growth) && growth.ItemLevelSync < amount)
 						amount = growth.ItemLevelSync;
 				}
 
@@ -1215,22 +1212,22 @@ internal class EquipmentSet {
 				// The following columns might have a value of -1, which means
 				// the item effectively takes up those slots too, so we need to
 				// add the item level to the total repeatedly for accurate calculations.
-				if (slot.OffHand == -1)
+				if (slot.Value.OffHand == -1)
 					totalLevel += amount;
-				if (slot.Head == -1)
+				if (slot.Value.Head == -1)
 					totalLevel += amount;
-				if (slot.Gloves == -1)
+				if (slot.Value.Gloves == -1)
 					totalLevel += amount;
-				if (slot.Legs == -1)
+				if (slot.Value.Legs == -1)
 					totalLevel += amount;
-				if (slot.Feet == -1)
+				if (slot.Value.Feet == -1)
 					totalLevel += amount;
 			}
 
 			// Stat Calculation
 
 			// Weapon Stats
-			if (slot is not null && slot.MainHand == 1) {
+			if (slot.HasValue && slot.Value.MainHand == 1) {
 				// Determine what kind of weapon damage we've got.
 				bool want_magic = EffectiveClass == 129 || item.DamageMag >= item.DamagePhys;
 
@@ -1240,28 +1237,24 @@ internal class EquipmentSet {
 
 				// Handle High-Quality
 				if (rawItem.HighQuality) {
-					foreach (var entry in item.BaseParamSpecial) {
-						uint statID = entry.BaseParamSpecial;
+					foreach (var entry in item.GetSpecialParams()) {
+						uint statID = entry.Item1.RowId;
 						if (statID == WeaponDamage.ID)
-							WeaponDamage.Gear += entry.BaseParamValueSpecial;
+							WeaponDamage.Gear += entry.Item2;
 					}
 				}
 
 				// Handle limits too.
 				uint sid = WeaponDamage.ID;
-				if (!Params.TryGetValue(sid, out var param)) {
-					param = Data.ParamSheet?.GetRow(sid);
-					if (param is not null)
-						Params[sid] = param;
-				}
+				if (Params.TryGetValue(sid, out var param) || (Data.ParamSheet != null && Data.ParamSheet.TryGetRow(sid, out param))) {
+					Params[sid] = param;
 
-				if (param is not null) {
 					if (synced) {
-						ushort factor = item.EquipSlotCategory.Row switch {
-							1 => param.oneHWpnPct,
-							2 => param.OHPct,
-							13 => param.twoHWpnPct,
-							14 => param.oneHWpnPct,
+						ushort factor = item.EquipSlotCategory.RowId switch {
+							1 => param.OneHandWeaponPercent,
+							2 => param.OffHandPercent,
+							13 => param.TwoHandWeaponPercent,
+							14 => param.OneHandWeaponPercent,
 							_ => 0,
 						};
 
@@ -1289,7 +1282,7 @@ internal class EquipmentSet {
 						// As far as I can determine, this is how the game handles
 						// these values. This may be slightly inaccurate.
 						WeaponDamage.Limit = (int) Math.Round(
-							(level.BaseParam[sid] * param.EquipSlotCategoryPct[item.EquipSlotCategory.Row])
+							(level.BaseParam(sid) * param.EquipSlotCategoryPct(item.EquipSlotCategory.RowId))
 							/ 1000f,
 							MidpointRounding.AwayFromZero
 						);
@@ -1317,18 +1310,18 @@ internal class EquipmentSet {
 			if (item.DefenseMag > 0)
 				AddGearStat(stats, (uint) Stat.MDF, gear: (short) item.DefenseMag);
 
-			foreach (var entry in item.BaseParam) {
-				uint statID = entry.BaseParam;
-				short value = entry.BaseParamValue;
+			foreach (var entry in item.GetParams()) {
+				uint statID = entry.Item1.RowId;
+				short value = entry.Item2;
 
 				AddGearStat(stats, statID, gear: value);
 			}
 
 			// High-Quality Stats
 			if (rawItem.HighQuality)
-				foreach (var entry in item.BaseParamSpecial) {
-					uint statID = entry.BaseParamSpecial;
-					short value = entry.BaseParamValueSpecial;
+				foreach (var entry in item.GetSpecialParams()) {
+					uint statID = entry.Item1.RowId;
+					short value = entry.Item2;
 
 					AddGearStat(stats, statID, gear: value);
 				}
@@ -1340,14 +1333,13 @@ internal class EquipmentSet {
 				if (rawMeld.ID == 0 || rawMeld.Grade < 0)
 					continue;
 
-				Materia? materia = rawMeld.Row();
-				if (materia is null || rawMeld.Grade >= materia.Value.Length)
+				if (rawMeld.Row() is not Materia materia || rawMeld.Grade >= materia.Value.Count)
 					continue;
 
-				uint statID = materia.BaseParam.Row;
+				uint statID = materia.BaseParam.RowId;
 				short value = materia.Value[rawMeld.Grade];
 
-				uint materiaItem = materia.Item[rawMeld.Grade].Row;
+				uint materiaItem = materia.Item[rawMeld.Grade].RowId;
 				//Plugin.INSTANCE.Logger.Debug($"Materia: {rawMeld.ID} -- Item: {materiaItem}");
 
 				// If there's no item, then it's a relic stat.
@@ -1370,7 +1362,8 @@ internal class EquipmentSet {
 			// waste values. Then add the waste to the main Attributes.
 			foreach (var stat in stats.Values) {
 				uint statID = stat.ID;
-				ExtendedBaseParam? param = Params[statID];
+				if (!Params.TryGetValue(statID, out var param))
+					continue;
 
 				// If we're synced, we need to calculate the stat limit
 				// for gear of this slot, use that as the limit, and
@@ -1379,52 +1372,11 @@ internal class EquipmentSet {
 					if (stat.Gear == 0)
 						stat.Limit = 0;
 					else {
-						ushort factor = item.EquipSlotCategory.Row switch {
-							1 => param.oneHWpnPct,
-							2 => param.OHPct,
-							3 => param.HeadPct,
-							4 => param.ChestPct,
-							5 => param.HandsPct,
-							6 => param.WaistPct,
-							7 => param.LegsPct,
-							8 => param.FeetPct,
-							9 => param.EarringPct,
-							10 => param.NecklacePct,
-							11 => param.BraceletPct,
-							12 => param.RingPct,
-							13 => param.twoHWpnPct,
-							14 => param.oneHWpnPct,
-							15 => param.ChestHeadPct,
-							16 => 0, // Chest Gloves Legs Feet? Probably unknown20
-							17 => 0, // Job Crystal
-							18 => param.LegsFeetPct,
-							19 => param.ChestHeadLegsFeetPct,
-							20 => param.ChestLegsGlovesPct,
-							21 => param.ChestLegsFeetPct,
-							_ => 0,
-						};
+						ushort factor = param.EquipSlotCategoryPct(item.EquipSlotCategory.RowId, shouldThrow: false);
 
 						float percentage = factor / 1000f;
 
-						ushort value = statID switch {
-							(int) Stat.STR => level.Strength,
-							(int) Stat.DEX => level.Dexterity,
-							(int) Stat.VIT => level.Vitality,
-							(int) Stat.INT => level.Intelligence,
-							(int) Stat.MND => level.Mind,
-							(int) Stat.PIE => level.Piety,
-							(int) Stat.PhysDMG => level.PhysicalDamage,
-							(int) Stat.MagDMG => level.PhysicalDamage,
-							(int) Stat.TEN => level.Tenacity,
-							(int) Stat.DEF => level.Defense,
-							(int) Stat.MDF => level.MagicDefense,
-							(int) Stat.DH => level.DirectHitRate,
-							(int) Stat.CRT => level.CriticalHit,
-							(int) Stat.DET => level.Determination,
-							(int) Stat.SKS => level.SkillSpeed,
-							(int) Stat.SPS => level.SpellSpeed,
-							_ => 0,
-						};
+						ushort value = level.BaseParam(statID, shouldThrow: false);
 
 						int val = (int) Math.Round(
 							value * percentage,
@@ -1446,7 +1398,7 @@ internal class EquipmentSet {
 					// As far as I can determine, this is how the game handles
 					// these values. This may be slightly inaccurate.
 					stat.Limit = (int) Math.Round(
-						(level.BaseParam[statID] * param.EquipSlotCategoryPct[item.EquipSlotCategory.Row])
+						(level.BaseParam(statID) * param.EquipSlotCategoryPct(item.EquipSlotCategory.RowId))
 						/ 1000f,
 						MidpointRounding.AwayFromZero
 					);
@@ -1492,8 +1444,7 @@ internal class EquipmentSet {
 
 		// Get the parameter data row.
 		if (!Params.ContainsKey(statID)) {
-			ExtendedBaseParam? param = Data.ParamSheet?.GetRow(statID);
-			if (param is null)
+			if (Data.ParamSheet is null || !Data.ParamSheet.TryGetRow(statID, out var param))
 				return;
 
 			Params[statID] = param;

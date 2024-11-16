@@ -1,3 +1,5 @@
+global using ExcelAction = Lumina.Excel.Sheets.Action;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,10 +8,9 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using GearsetHelperPlugin.Models;
-using GearsetHelperPlugin.Sheets;
 
 using Lumina.Excel;
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin;
 
@@ -107,12 +108,12 @@ internal static partial class Data {
 
 	#region Sheet Access
 
-	internal static ExcelSheet<ExtendedAction>? ActionSheet { get; set; }
+	internal static ExcelSheet<ExcelAction>? ActionSheet { get; set; }
 	internal static ExcelSheet<ActionTransient>? ActionTransSheet { get; set; }
-	internal static ExcelSheet<ExtendedItem>? ItemSheet { get; set; }
-	internal static ExcelSheet<ExtendedBaseParam>? ParamSheet { get; set; }
+	internal static ExcelSheet<Item>? ItemSheet { get; set; }
+	internal static ExcelSheet<BaseParam>? ParamSheet { get; set; }
 	internal static ExcelSheet<ParamGrow>? GrowSheet { get; set; }
-	internal static ExcelSheet<ExtendedItemLevel>? LevelSheet { get; set; }
+	internal static ExcelSheet<ItemLevel>? LevelSheet { get; set; }
 	internal static ExcelSheet<Materia>? MateriaSheet { get; set; }
 	internal static ExcelSheet<Race>? RaceSheet { get; set; }
 	internal static ExcelSheet<Tribe>? TribeSheet { get; set; }
@@ -135,14 +136,14 @@ internal static partial class Data {
 	}
 
 	internal static void LoadSheets(ExcelModule excel) {
-		ActionSheet = excel.GetSheet<ExtendedAction>();
+		ActionSheet = excel.GetSheet<ExcelAction>();
 		ActionTransSheet = excel.GetSheet<ActionTransient>();
-		ItemSheet = excel.GetSheet<ExtendedItem>();
+		ItemSheet = excel.GetSheet<Item>();
 		ItemActionSheet = excel.GetSheet<ItemAction>();
 		FoodSheet = excel.GetSheet<ItemFood>();
-		ParamSheet = excel.GetSheet<ExtendedBaseParam>();
+		ParamSheet = excel.GetSheet<BaseParam>();
 		GrowSheet = excel.GetSheet<ParamGrow>();
-		LevelSheet = excel.GetSheet<ExtendedItemLevel>();
+		LevelSheet = excel.GetSheet<ItemLevel>();
 		MateriaSheet = excel.GetSheet<Materia>();
 		TribeSheet = excel.GetSheet<Tribe>();
 		RaceSheet = excel.GetSheet<Race>();
@@ -245,19 +246,18 @@ internal static partial class Data {
 		var sw = new Stopwatch();
 		sw.Start();
 
-		foreach (ExtendedItem item in ItemSheet) {
-			if (item.ItemUICategory.Row != 46 && item.ItemUICategory.Row != 44)
+		foreach (var item in ItemSheet) {
+			if (item.ItemUICategory.RowId != 46 && item.ItemUICategory.RowId != 44)
 				continue;
 
-			ItemAction? action = item.ItemAction.Value;
-			if (action is null)
+			if (!item.ItemAction.IsValid)
 				continue;
 
+			var action = item.ItemAction.Value;
 			if (action.DataHQ[0] == 48) {
 				// Food
-				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
-				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, true);
+				if (FoodSheet.TryGetRow(action.DataHQ[1], out var food)) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.RowId, true);
 					fdata.UpdateStats(food);
 					foodList.Add(fdata);
 				}
@@ -265,9 +265,8 @@ internal static partial class Data {
 
 			if (action.Data[0] == 48) {
 				// Food (NQ)
-				ItemFood? food = FoodSheet.GetRow(action.Data[1]);
-				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, false);
+				if (FoodSheet.TryGetRow(action.Data[1], out var food)) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.RowId, false);
 					fdata.UpdateStats(food);
 					foodList.Add(fdata);
 				}
@@ -275,9 +274,8 @@ internal static partial class Data {
 
 			if (action.DataHQ[0] == 49) {
 				// Medicine
-				ItemFood? food = FoodSheet.GetRow(action.DataHQ[1]);
-				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, true);
+				if (FoodSheet.TryGetRow(action.DataHQ[1], out var food)) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.RowId, true);
 					fdata.UpdateStats(food);
 					medicineList.Add(fdata);
 				}
@@ -285,9 +283,8 @@ internal static partial class Data {
 
 			if (action.Data[0] == 49) {
 				// Medicine (NQ)
-				ItemFood? food = FoodSheet.GetRow(action.Data[1]);
-				if (food is not null) {
-					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.Row, false);
+				if (FoodSheet.TryGetRow(action.Data[1], out var food)) {
+					var fdata = new Food(item.RowId, food.RowId, item.LevelItem.RowId, false);
 					fdata.UpdateStats(food);
 					medicineList.Add(fdata);
 				}
@@ -343,7 +340,7 @@ internal static partial class Data {
 		[(int) Stat.SKS] = 130,
 		[(int) Stat.SPS] = 130,
 
-		[(int) Stat.TEN] = 100,
+		[(int) Stat.TEN] = 112,
 		[(int) Stat.PIE] = 150,
 
 		[(int) Stat.DEF] = 15,

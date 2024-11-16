@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 
-using GearsetHelperPlugin.Sheets;
-
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin;
 
@@ -56,9 +54,9 @@ internal enum GameClass : byte {
 internal static partial class Data {
 
 	public static ClassJob? ToRow(this GameClass job) {
-		if (!CheckSheets())
+		if (!CheckSheets() || !ClassSheet.TryGetRow((uint) job, out var row))
 			return null;
-		return ClassSheet.GetRow((uint) job);
+		return row;
 	}
 
 	public static GameClass ToGameClass(this ClassJob job) {
@@ -66,16 +64,18 @@ internal static partial class Data {
 	}
 
 	public static GameClass? ToParentJob(this GameClass job) {
-		return job.ToRow()?.ClassJobParent?.Value?.ToGameClass();
+		if (job.ToRow() is not ClassJob cj || !cj.ClassJobParent.IsValid)
+			return null;
+		return cj.ClassJobParent.Value.ToGameClass();
 	}
 
-	public static bool IsPhysical(this ClassJob job) => job.ClassJobCategory.Row == 30;
+	public static bool IsPhysical(this ClassJob job) => job.ClassJobCategory.RowId == 30;
 
-	public static bool IsMagical(this ClassJob job) => job.ClassJobCategory.Row == 31;
+	public static bool IsMagical(this ClassJob job) => job.ClassJobCategory.RowId == 31;
 
-	public static bool IsCrafter(this ClassJob job) => job.ClassJobCategory.Row == 33;
+	public static bool IsCrafter(this ClassJob job) => job.ClassJobCategory.RowId == 33;
 
-	public static bool IsGatherer(this ClassJob job) => job.ClassJobCategory.Row == 32;
+	public static bool IsGatherer(this ClassJob job) => job.ClassJobCategory.RowId == 32;
 
 	public static bool IsTank(this ClassJob job) => job.Role == 1;
 
@@ -110,7 +110,7 @@ internal static partial class Data {
 	public static bool IsMagicalRanged(this GameClass gc) => gc.ToRow()?.IsMagicalRanged() ?? false;
 
 
-	public static IEnumerable<ExtendedAction> GetMatchingActions(this GameClass job, uint level) {
+	public static IEnumerable<ExcelAction> GetMatchingActions(this GameClass job, uint level) {
 		if (!CheckSheets())
 			yield break;
 
@@ -123,7 +123,7 @@ internal static partial class Data {
 			if (action.IsPvP || !action.IsPlayerAction || action.ClassJobLevel > level)
 				continue;
 
-			uint row = action.ClassJob.Row;
+			uint row = action.ClassJob.RowId;
 			if (row == jobId || (parentId.HasValue && parentId.Value == row))
 				yield return action;
 		}

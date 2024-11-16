@@ -14,8 +14,6 @@ internal class SettingsWindow : Window, IDisposable {
 
 	private readonly PluginUI Ui;
 
-	private bool visible = false;
-
 	private string token = string.Empty;
 	private string username = string.Empty;
 	private string password = string.Empty;
@@ -23,13 +21,6 @@ internal class SettingsWindow : Window, IDisposable {
 	private Task<Exporter.EtroLoginResponse>? LoginTask;
 
 	private Configuration Config => Ui.Plugin.Config;
-
-	public bool Visible {
-		get => visible;
-		set {
-			visible = value;
-		}
-	}
 
 	public SettingsWindow(PluginUI ui) : base(
 		"Gearset Helper Settings",

@@ -1,6 +1,6 @@
 using System;
 
-using GearsetHelperPlugin.Sheets;
+using Lumina.Excel.Sheets;
 
 namespace GearsetHelperPlugin.Models;
 
@@ -49,9 +49,9 @@ internal record StatData(
 		NextTier = (int) Math.Ceiling((tiers + 1) * perTier) - total;
 	}
 
-	public ExtendedBaseParam? Row() {
-		if (!Data.CheckSheets())
+	public BaseParam? Row() {
+		if (!Data.CheckSheets() || !Data.ParamSheet.TryGetRow(ID, out var row))
 			return null;
-		return Data.ParamSheet.GetRow(ID);
+		return row;
 	}
 }
