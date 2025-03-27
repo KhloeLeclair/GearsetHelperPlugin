@@ -611,7 +611,7 @@ internal class EquipmentSet {
 		// ====================================================================
 		// 1. The weapon damage multiplier.
 		// ====================================================================
-		float dmgMulti = (WeaponDamage.Value + MathF.Floor((baseValue * jobMod) / 1000f)) / 100f;
+		float dmgMulti = FL(WeaponDamage.Value + ((baseValue * jobMod) / 1000f)) / 100f;
 
 		// ====================================================================
 		// 2. A critical damage multiplier.
@@ -624,9 +624,10 @@ internal class EquipmentSet {
 			int total = stat is null ? 0 : stat.ExtraFood;
 
 			// Calculate the Critical Hit Multiplier (Percentage in Range: 0..1 (can exceed 1))
-			critMulti = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 1400f) / 1000f;
+			critMulti = (FL(coefficient * (float) total / growth.LevelModifier) + 1400f) / 1000f;
+
 			// Calculate the Critical Hit Rate (Percentage in Range: 0..1)
-			critRate = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 50f) / 1000f;
+			critRate = (FL(coefficient * (float) total / growth.LevelModifier) + 50f) / 1000f;
 		}
 
 		// ====================================================================
@@ -634,15 +635,20 @@ internal class EquipmentSet {
 		// ====================================================================
 		float mainMulti;
 		{
-			bool isTank = job.Role == 1;
-
 			Attributes.TryGetValue((uint) primaryStat, out StatData? stat);
 
-			float scalar = isTank
-				? Data.GetTankAttackScalar(EffectiveLevel)
-				: Data.GetAttackScalar(EffectiveLevel);
+			float scalar = Data.GetAttackScalar(job, EffectiveLevel);
+			if (scalar <= 0) {
+				DamageValues.Clear();
+				return;
+			}
 
-			mainMulti = (100f + MathF.Floor((((stat?.Value ?? baseValue) - baseValue) * scalar) / (float) baseValue)) / 100f;
+			int total = stat is null ? 0 : stat.Value - baseValue;
+
+			mainMulti = MathF.Max(
+				0,
+				(TRUNC(scalar * (float) total / baseValue) + 100f) / 100f
+			);
 		}
 
 		// ====================================================================
@@ -655,7 +661,7 @@ internal class EquipmentSet {
 
 			int total = stat is null ? 0 : stat.ExtraFood;
 
-			detMulti = (MathF.Floor(coefficient * (float) total / growth.LevelModifier) + 1000f) / 1000f;
+			detMulti = (FL(coefficient * (float) total / growth.LevelModifier) + 1000f) / 1000f;
 		}
 
 		// ====================================================================
@@ -669,7 +675,7 @@ internal class EquipmentSet {
 			int total = stat is null ? 0 : stat.ExtraFood;
 
 			// Calculate the Direct Hit Rate (Percentage in Range: 0..1)
-			dhRate = MathF.Floor(coefficient * (float) total / growth.LevelModifier) / 1000f;
+			dhRate = FL(coefficient * (float) total / growth.LevelModifier) / 1000f;
 			dhMulti = 1.25f;
 		}
 
@@ -701,36 +707,34 @@ internal class EquipmentSet {
 		//PluginLog.Debug($"Source Values: dmg={dmgMulti}, main={mainMulti}, critM={critMulti} critR={critRate}, crit={avgCritMulti}, det={detMulti}, dh={dhMulti}, ten={tenMulti}, ext={extra}");
 
 		foreach (int potency in Data.GetExamplePotencies(job.ToGameClass(), EffectiveLevel)) {
-			float expected = MathF.Round(
-				potency * dmgMulti * mainMulti * avgCritMulti * detMulti * avgDhMulti * tenMulti * extra,
-				MidpointRounding.ToZero
-			);
+			float expectBase;
+			if (job.IsMagical())
+				expectBase = FL(FL(FL(detMulti * mainMulti) * FL(dmgMulti * potency)) * tenMulti);
+			else
+				expectBase = FL(FL(FL(FL(potency * mainMulti) * detMulti) * tenMulti) * dmgMulti);
 
-			float expectNormal = MathF.Round(
-				potency * dmgMulti * mainMulti * detMulti * tenMulti * extra,
-				MidpointRounding.ToZero
-			);
+			float expectNormal = FL(expectBase * extra) + (potency < 100 ? 1 : 0);
 
-			float expectCrit = MathF.Round(
-				potency * dmgMulti * mainMulti * critMulti * detMulti * tenMulti * extra,
-				MidpointRounding.ToZero
-			);
-
-			float expectDH = MathF.Round(
-				potency * dmgMulti * mainMulti * dhMulti * detMulti * tenMulti * extra,
-				MidpointRounding.ToZero
-			);
-
-			float expectWhoa = MathF.Round(
-				potency * dmgMulti * mainMulti * critMulti * dhMulti * detMulti * tenMulti * extra,
-				MidpointRounding.ToZero
-			);
+			float expected = FL(FL(expectNormal * avgCritMulti) * avgDhMulti);
+			float expectCrit = FL(expectNormal * critMulti);
+			float expectDH = FL(expectNormal * dhMulti);
+			float expectWhoa = FL(expectCrit * dhMulti);
 
 			DamageValues.Add(potency, new(expectNormal, expected, expectCrit, expectDH, expectWhoa));
 		}
 
 		//PluginLog.Debug($"Values={DamageValues}");
 	}
+
+	private static float FL(float input) {
+		float floored = MathF.Floor(input);
+		if (input - floored >= 0.99999995f)
+			return floored + 1;
+		return floored;
+	}
+
+	private static float TRUNC(float input) => input >= 0 ? FL(input) : -FL(-input);
+
 
 	private void CalculateHPStuff(ClassJob job, ParamGrow growth) {
 		// TODO: Figure out why the base game values aren't accurate.
@@ -1416,11 +1420,47 @@ internal class EquipmentSet {
 			}
 		}
 
+		// Make sure we have the correct speed stat (SkS / SpS)
+		Stat speedStat = ((GameClass) EffectiveClass).IsMagical() ? Stat.SPS : Stat.SKS;
+		EnsureStat(null, (uint) speedStat);
+
 		// Finally, set the item level.
 		int slots = 12;
 		//Plugin.INSTANCE.Logger.Info($"Total Level: {totalLevel} -- Slots: {slots} -- Raw: {totalLevel / (float) slots}");
 		ItemLevel = (ushort) Math.Round(totalLevel / (float) slots, MidpointRounding.ToZero);
 	}
+
+	private bool EnsureStat(Dictionary<uint, StatData>? stats, uint statID) {
+		// Skip empty stats.
+		if (statID == 0)
+			return false;
+
+		// TODO: Proper handling for "Main Attribute" and
+		// "Secondary Attribute". For now, just skip them.
+		if (statID == (int) Stat.MainAttribute || statID == (int) Stat.SecondaryAttribute)
+			return false;
+
+		// Get the parameter data row.
+		if (!Params.ContainsKey(statID)) {
+			if (Data.ParamSheet is null || !Data.ParamSheet.TryGetRow(statID, out var param))
+				return false;
+
+			Params[statID] = param;
+		}
+
+		// Ensure the equipment set has a record for this stat.
+		if (!Attributes.ContainsKey(statID))
+			Attributes[statID] = new StatData(statID);
+
+		if (stats is not null) {
+			// And track this stat on the item.
+			if (!stats.ContainsKey(statID))
+				stats[statID] = new(statID);
+		}
+
+		return true;
+	}
+
 
 	/// <summary>
 	/// Add attribute values from an item to the equipment set. This
@@ -1433,26 +1473,9 @@ internal class EquipmentSet {
 	/// <param name="gear">The points to add to the gear</param>
 	/// <param name="delta">The points to add to the delta</param>
 	private void AddGearStat(Dictionary<uint, StatData>? stats, uint statID, short gear = 0, short delta = 0) {
-		// Skip empty stats.
-		if (statID == 0 || (gear == 0 && delta == 0))
+		// Make sure we have valid data to track.
+		if ((gear == 0 && delta == 0) || !EnsureStat(stats, statID))
 			return;
-
-		// TODO: Proper handling for "Main Attribute" and
-		// "Secondary Attribute". For now, just skip them.
-		if (statID == (int) Stat.MainAttribute || statID == (int) Stat.SecondaryAttribute)
-			return;
-
-		// Get the parameter data row.
-		if (!Params.ContainsKey(statID)) {
-			if (Data.ParamSheet is null || !Data.ParamSheet.TryGetRow(statID, out var param))
-				return;
-
-			Params[statID] = param;
-		}
-
-		// Ensure the equipment set has a record for this stat.
-		if (!Attributes.ContainsKey(statID))
-			Attributes[statID] = new StatData(statID);
 
 		// Add the value from this piece of equipment to the record.
 		if (gear > 0)
@@ -1460,17 +1483,13 @@ internal class EquipmentSet {
 		if (delta > 0)
 			Attributes[statID].Delta += delta;
 
-		if (stats is null)
-			return;
-
 		// And track this stat on the item.
-		if (!stats.ContainsKey(statID))
-			stats[statID] = new(statID);
-
-		if (gear > 0)
-			stats[statID].Gear += gear;
-		if (delta > 0)
-			stats[statID].Delta += delta;
+		if (stats is not null) {
+			if (gear > 0)
+				stats[statID].Gear += gear;
+			if (delta > 0)
+				stats[statID].Delta += delta;
+		}
 	}
 
 	#endregion

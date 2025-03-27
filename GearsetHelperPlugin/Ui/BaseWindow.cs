@@ -1002,7 +1002,7 @@ internal abstract class BaseWindow : IDisposable {
 	}
 
 	internal static void DrawDamageTable(IEnumerable<KeyValuePair<int, DamageValues>> data) {
-		DrawOutdatedMathWarning();
+		//DrawOutdatedMathWarning();
 
 		ImGui.BeginTable("DamageTable", 6, ImGuiTableFlags.Resizable | ImGuiTableFlags.RowBg);
 

@@ -503,7 +503,7 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 		return 1f;
 	}
 
-	public static float GetAttackScalar(this GameClass job, uint level) {
+	public static float GetAttackScalar(this ClassJob job, uint level) {
 		if (job.IsTank())
 			return GetTankAttackScalar(level);
 		return GetAttackScalar(level);
@@ -511,14 +511,30 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 
 
 	public static float GetTankAttackScalar(uint level) {
-		if (level <= 80)
+		return level switch {
+			70 => 105,
+			80 => 115,
+			90 => 156,
+			100 => 190,
+			_ => -1
+		};
+
+		/*if (level <= 80)
 			return (int) level + 35f;
 
-		return ((int) level - 80) * 4.1f + 115f;
+		return ((int) level - 80) * 4.1f + 115f;*/
 	}
 
 	public static float GetAttackScalar(uint level) {
-		if (level <= 50)
+		return level switch {
+			70 => 125,
+			80 => 165,
+			90 => 195,
+			100 => 237,
+			_ => -1
+		};
+
+		/*if (level <= 50)
 			return 75;
 
 		if (level <= 70)
@@ -527,7 +543,7 @@ stuff = [...document.querySelectorAll('tr')].filter(x => /^pve_action_/.test(x.i
 		if (level <= 80)
 			return ((int) level - 70) * 4f + 125f;
 
-		return ((int) level - 80) * 3f + 165;
+		return ((int) level - 80) * 3f + 165;*/
 	}
 
 }
